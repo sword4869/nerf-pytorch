@@ -111,7 +111,7 @@ class NeRF(nn.Module):
         # 下标1,2,3,4,6,7的MLP: nn.Linear(W, W)
         # 下标5的残差MLP：nn.Linear(W + input_ch, W)
         self.pts_linears = nn.ModuleList(
-            [nn.Linear(input_ch, W)] + [nn.Linear(W, W) if i not in self.skips else nn.Linear(W + input_ch, W) for i in range(D-1)])
+            [nn.Linear(input_ch, W)] + [nn.Linear(W, W) for i in range(D-1)])
         
         ### Implementation according to the official code release (https://github.com/bmild/nerf/blob/master/run_nerf_helpers.py#L104-L105)
         self.views_linears = nn.ModuleList([nn.Linear(input_ch_views + W, W//2)])
@@ -132,12 +132,15 @@ class NeRF(nn.Module):
         # 划分输入数据为位置xyz和方向。
         input_pts, input_views = torch.split(x, [self.input_ch, self.input_ch_views], dim=-1)
         h = input_pts
+        residual = None
         for i, l in enumerate(self.pts_linears):
             h = self.pts_linears[i](h)
             h = F.relu(h)
             # 没问题，因为pts_linears加入了输入层，所以下标4的MLP其实位置是下标5
+            if i == 0:
+                residual = h
             if i in self.skips:
-                h = torch.cat([input_pts, h], -1)
+                h = residual + h
 
         if self.use_viewdirs:
             # 密度
