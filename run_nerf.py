@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import imageio
-import time
 import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
@@ -561,8 +560,6 @@ def train():
     args = parser.parse_args()
 
 
-
-
     # Load data
     K = None
     if args.dataset_type == 'llff':
@@ -665,7 +662,6 @@ def train():
 
     # Create nerf model
     render_kwargs_train, render_kwargs_test, start, grad_vars, optimizer = create_nerf(args)
-    global_step = start
 
     bds_dict = {
         'near' : near,
@@ -740,8 +736,9 @@ def train():
 
     
     start = start + 1
-    for i in trange(start, N_iters):
-        time0 = time.time()
+    pbar = trange(start, N_iters)
+    for i in pbar:
+        pbar.set_description(f"[TRAIN] Iter: {i} ")
 
         # Sample random ray batch
         if use_batching:
@@ -813,7 +810,7 @@ def train():
         ###   update learning rate   ###
         decay_rate = 0.1
         decay_steps = args.lrate_decay * 1000
-        new_lrate = args.lrate * (decay_rate ** (global_step / decay_steps))
+        new_lrate = args.lrate * (decay_rate ** (i / decay_steps))
         for param_group in optimizer.param_groups:
             param_group['lr'] = new_lrate
         ################################
@@ -822,7 +819,7 @@ def train():
         if i%args.i_weights==0:
             path = os.path.join(basedir, expname, '{:06d}.tar'.format(i))
             ckpt = {
-                'global_step': global_step,
+                'global_step': i,
                 'network_fn_state_dict': render_kwargs_train['network_fn'].state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
             }
@@ -860,7 +857,8 @@ def train():
         writer.add_scalar('loss/train', loss, i)
         if i%args.i_img==0:
             img_i = np.random.choice(i_val)
-            target_s = images[img_i]
+            target = images[img_i]
+            target_s = torch.Tensor(target).to(device)
             with torch.no_grad():
                 rgb, disp, acc, extras = render(H, W, K, chunk=args.chunk, c2w=torch.Tensor(poses[img_i]).to(device),
                                         verbose=i < 10, retraw=True,
@@ -885,8 +883,6 @@ def train():
                 writer.add_image('val/disp0', extras['disp0'], i, dataformats='HW')
                 writer.add_image('val/acc0', extras['acc0'], i, dataformats='HW')
                 writer.add_image('val/z_std', extras['z_std'], i, dataformats='HW')
-
-        global_step += 1
 
 
 if __name__=='__main__':
