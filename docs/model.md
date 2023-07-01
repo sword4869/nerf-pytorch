@@ -45,6 +45,12 @@ class NeRF(nn.Module):
 > Paper: a skip connection that concatenates this input to the fifth layer’s activation
 
 这个图的示意不是第五层的输入加入了x，而是x和第五层的输出concatenate起来给第六层。
+
+> how many times forward MLP
+
+图像上一个点对应一条光线还是多条光线的平均？也就是说，图像像素个数和光线个数一致吗？
+好像是的。为了渲染一幅1920x1280的图片，需要1920x1280条光线，每条光线 64+(64+128)个粗和细的采样，即MLP需要做1920x1280x(64+(64+128))查询。
+
 ## create_nerf
 
 ![图 4](../images/7efe5124adc88aee91b5e3d382362233b7b3b49de3b5d605e498a957937f4e2f.png)  

@@ -158,6 +158,8 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
         H = H//render_factor
         W = W//render_factor
         focal = focal/render_factor
+        # MODIFY
+        K[:2, :3] /= render_factor
 
     rgbs = []
     disps = []
@@ -315,8 +317,9 @@ def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False, pytest=F
     rgb_map = torch.sum(weights[...,None] * rgb, -2)  # [N_rays, 3]
 
     depth_map = torch.sum(weights * z_vals, -1)
-    disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.sum(weights, -1))
+    # MODIFY
     acc_map = torch.sum(weights, -1)
+    disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.max(1e-10 * torch.ones_like(acc_map), acc_map))
 
     if white_bkgd:
         rgb_map = rgb_map + (1.-acc_map[...,None])
@@ -557,7 +560,7 @@ def train():
     parser = config_parser()
     args = parser.parse_args()
 
-    writer = SummaryWriter()
+
 
 
     # Load data
@@ -733,7 +736,8 @@ def train():
     print('VAL views are', i_val)
 
     # Summary writers
-    # writer = SummaryWriter(os.path.join(basedir, 'summaries', expname))
+    writer = SummaryWriter()
+
     
     start = start + 1
     for i in trange(start, N_iters):
@@ -794,6 +798,7 @@ def train():
         img_loss = img2mse(rgb, target_s)
         trans = extras['raw'][...,-1]
         loss = img_loss
+        # psnr 只看精细图片的loss， 或者说coarse和fine 的都是分开算的，就像下面的psnr0
         psnr = mse2psnr(img_loss)
 
         if 'rgb0' in extras:
@@ -813,23 +818,21 @@ def train():
             param_group['lr'] = new_lrate
         ################################
 
-        dt = time.time()-time0
-        # print(f"Step: {global_step}, Loss: {loss}, Time: {dt}")
-        #####           end            #####
-
         # save ckpt
         if i%args.i_weights==0:
             path = os.path.join(basedir, expname, '{:06d}.tar'.format(i))
-            torch.save({
+            ckpt = {
                 'global_step': global_step,
                 'network_fn_state_dict': render_kwargs_train['network_fn'].state_dict(),
-                'network_fine_state_dict': render_kwargs_train['network_fine'].state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-            }, path)
+            }
+            if args.N_importance > 0:
+                ckpt.update({'network_fine_state_dict': render_kwargs_train['network_fine'].state_dict()})
+            torch.save(ckpt, path)
             print(f'Saved checkpoints at {path}\n')
 
         # save video (rgb and disparity) of render_poses
-        if i%args.i_video==0 and i > 0:
+        if i%args.i_video==0:
             # Turn on testing mode
             with torch.no_grad():
                 rgbs, disps = render_path(render_poses, hwf, K, args.chunk, render_kwargs_test)
@@ -838,15 +841,8 @@ def train():
             imageio.mimwrite(moviebase + 'disp.mp4', to8b(disps / np.max(disps)), fps=30, quality=8)
             print('Done, saved render poses\n')
 
-            # if args.use_viewdirs:
-            #     render_kwargs_test['c2w_staticcam'] = render_poses[0][:3,:4]
-            #     with torch.no_grad():
-            #         rgbs_still, _ = render_path(render_poses, hwf, args.chunk, render_kwargs_test)
-            #     render_kwargs_test['c2w_staticcam'] = None
-            #     imageio.mimwrite(moviebase + 'rgb_still.mp4', to8b(rgbs_still), fps=30, quality=8)
-
         # poses[i_test]
-        if i%args.i_testset==0 and i > 0:
+        if i%args.i_testset==0:
             testsavedir = os.path.join(basedir, expname, 'test_poses_{:06d}'.format(i))
             os.makedirs(testsavedir, exist_ok=True)
             print('test poses shape', poses[i_test].shape)
@@ -859,41 +855,36 @@ def train():
         if i%args.i_print==0:
             tqdm.write(f"[TRAIN] Iter: {i} Loss: {loss.item()}  PSNR: {psnr.item()}")
 
-        """
-            print(expname, i, psnr.numpy(), loss.numpy(), global_step.numpy())
-            print('iter time {:.05f}'.format(dt))
-        """
-        
         # tensorboard
-        writer.add_scalar('train/psnr', psnr, i)
-        writer.add_scalar('train/loss', loss, i)
+        writer.add_scalar('psnr/train', psnr, i)
+        writer.add_scalar('loss/train', loss, i)
         if i%args.i_img==0:
-            img_i=np.random.choice(i_val)
+            img_i = np.random.choice(i_val)
+            target_s = images[img_i]
             with torch.no_grad():
                 rgb, disp, acc, extras = render(H, W, K, chunk=args.chunk, c2w=torch.Tensor(poses[img_i]).to(device),
                                         verbose=i < 10, retraw=True,
                                         **render_kwargs_test)
+            img_loss = img2mse(rgb, target_s)
+            psnr = mse2psnr(img_loss)
+            writer.add_scalar('psnr/val', psnr, i)
+
+            loss = img_loss
+            if args.N_importance > 0:
+                img_loss0 = img2mse(extras['rgb0'], target_s)
+                loss = loss + img_loss0
+            writer.add_scalar('loss/val', loss, i)
 
             writer.add_image('val/rgb', rgb, i, dataformats='HWC')
             writer.add_image('val/disp', disp, i, dataformats='HW')
             writer.add_image('val/acc', acc, i, dataformats='HW')
-            writer.add_image('val/target_s', images[img_i], i, dataformats='HWC')
+            writer.add_image('val/target_s', target_s, i, dataformats='HWC')
 
             if args.N_importance > 0:
                 writer.add_image('val/rgb0', extras['rgb0'], i, dataformats='HWC')
                 writer.add_image('val/disp0', extras['disp0'], i, dataformats='HW')
                 writer.add_image('val/acc0', extras['acc0'], i, dataformats='HW')
                 writer.add_image('val/z_std', extras['z_std'], i, dataformats='HW')
-            # writer.add_image('val/rgb', to8b(rgb), i, dataformats='HWC')
-            # writer.add_image('val/disp', to8b(disp), i, dataformats='HW')
-            # writer.add_image('val/acc', to8b(acc), i, dataformats='HW')
-            # writer.add_image('val/target_s', to8b(images[img_i]), i, dataformats='HWC')
-
-            # if args.N_importance > 0:
-            #     writer.add_image('val/rgb0', to8b(extras['rgb0']), i, dataformats='HWC')
-            #     writer.add_image('val/disp0', to8b(extras['disp0']), i, dataformats='HW')
-            #     writer.add_image('val/acc0', to8b(extras['acc0']), i, dataformats='HW')
-            #     writer.add_image('val/z_std', to8b(extras['z_std']), i, dataformats='HW')
 
         global_step += 1
 

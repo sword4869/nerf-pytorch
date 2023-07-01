@@ -24,7 +24,8 @@
 
 ### 1.1.2. Dataset
 
-![图 2](../images/401ebbe044c52ad8afc7e2cf5e2382eae63d2ad9effac305666f434552b5fa7e.png)  
+![图 1](../images/4d6a0b59332a5dff0cd95cd91cbee548f82a4b768035809d3358a5d06c7d14a2.png)  
+  
 
 ### 1.1.3. MLP
 
