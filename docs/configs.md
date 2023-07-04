@@ -10,6 +10,7 @@
       - [1.1.5.3. ckpt](#1153-ckpt)
       - [1.1.5.4. quick start](#1154-quick-start)
       - [1.1.5.5. render\_poses](#1155-render_poses)
+      - [1.1.5.6. render\_only](#1156-render_only)
 
 ---
 # 1. configs
@@ -84,3 +85,10 @@ render_only
 如果 `--render_test` ，那么 `render_poses` 就是测试集里的poses，有对应图片真值。
 
 `i_video` 用的是 `render_poses`， `i_testset` 用的是 `poses[i_test]`
+
+
+#### 1.1.5.6. render_only
+
+渲染`render_poses`(可使用 `render_test`)。
+
+保存rgb图片，并使用图片生成rgb视频。

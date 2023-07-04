@@ -5,6 +5,7 @@
   - [1.4. render\_factor of render\_path](#14-render_factor-of-render_path)
   - [1.5. none state\_dict of ckpt](#15-none-state_dict-of-ckpt)
   - [1.6. global\_step](#16-global_step)
+  - [1.7. 输出名称](#17-输出名称)
 
 ---
 # 1. What is the difference between the origin code and forked code
@@ -58,3 +59,15 @@ disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.ma
 `global_step` 与 `i` 重复了.
 
 另外，修改了进度条的样式，加了表示 `i` 的前缀。
+
+## 1.7. 输出名称
+
+- render_poses的视频：
+
+  `fern_test_spiral_200000_rgb.mp4` -> `render_poses_200000_rgb.mp4`
+
+  `fern_test_spiral_200000_disp.mp4` -> `render_poses_200000_disp.mp4`
+
+- test_poses的图片
+
+  `testset_010000` -> `test_poses_010000`
