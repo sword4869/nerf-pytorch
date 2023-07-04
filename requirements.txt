@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cu117
+
 configargparse
 imageio
 imageio-ffmpeg
