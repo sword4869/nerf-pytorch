@@ -32,10 +32,15 @@ def batchify(fn, chunk):
 
 def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     """
+    Arguments:
+        inputs: (N_rays, N_points_per_ray, 3)
+        viewdirs: (N_rays, 3)
+        frame_time: (N_rays, 1)
     Prepares inputs and applies network 'fn'.
     1. embed `inputs` and `viewdirs` -> `embedded`
     2. batchify
     """
+    # (N_rays * N_points_per_ray, 3)
     inputs_flat = torch.reshape(inputs, [-1, inputs.shape[-1]])
     embedded = embed_fn(inputs_flat)
 
@@ -46,7 +51,9 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
         embedded = torch.cat([embedded, embedded_dirs], -1)
 
     # fn(embedded)  or ret(embedded)
+    # (N_rays * N_points_per_ray, 4)
     outputs_flat = batchify(fn, netchunk)(embedded)
+    # (N_rays, N_points_per_ray, 4)
     outputs = torch.reshape(outputs_flat, list(inputs.shape[:-1]) + [outputs_flat.shape[-1]])
     return outputs
 
