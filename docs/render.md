@@ -113,6 +113,7 @@ render_kwargs_test['raw_noise_std'] = 0.
 
 `sample_pdf()`: 逆采样 
 
+粗和细的点都输入到 fine network 来查询。
 ### 1.2.2. raw2outputs
 
 ![图 7](../images/dd24e119dca965ef5a80d263dddd881bbbc65333bafc511db09f6b13c847d1e7.png)  

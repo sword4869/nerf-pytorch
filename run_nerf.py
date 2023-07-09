@@ -35,7 +35,9 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     Arguments:
         inputs: (N_rays, N_points_per_ray, 3)
         viewdirs: (N_rays, 3)
-        frame_time: (N_rays, 1)
+        fn: model
+        embed_fn, embeddirs_fn: embedder's function
+        netchunk: chunk for run network
     Prepares inputs and applies network 'fn'.
     1. embed `inputs` and `viewdirs` -> `embedded`
     2. batchify
