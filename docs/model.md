@@ -55,3 +55,5 @@ class NeRF(nn.Module):
 
 ![图 4](../images/7efe5124adc88aee91b5e3d382362233b7b3b49de3b5d605e498a957937f4e2f.png)  
 
+
+`network_query_fn` 相对于 `run_network` 的区别就是额外指定了 `embed_fn`,`embeddirs_fn`,`netchunk` 三个参数。直接调用的话，还得惦记着位置编码。

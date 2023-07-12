@@ -18,7 +18,7 @@
             "program": "run_nerf.py",
             "console": "integratedTerminal",
             "args": [
-                "--config", "logs/configs/mic.txt"
+                "--config", "logs/config.txt"
             ]
         },
         {
