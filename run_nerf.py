@@ -228,8 +228,9 @@ def render(H, W, K, chunk=1024*32, rays=None, c2w=None, ndc=True,
        camera while using other c2w argument for viewing directions.
 
     Returns: Tensor
-        rgb_map: [batch_size, 3]. Predicted RGB values for rays.
-        extras: dict with everything returned by render_rays(). 
+        将 render_rays() 的各变量，返回特定的shape。
+        render_path() 调用 render() 的则会返回图片格式 (H, W, C)；直接调用 render(batch_rays) 则会返回 (N_rand, C)
+    
 
     """
     if c2w is not None:
@@ -752,7 +753,7 @@ def train():
             # Random from one image
             img_i = np.random.choice(i_train)
             target = images[img_i]
-            pose = poses[img_i, :3,:4]
+            pose = poses[img_i, :3, :4]
 
             if N_rand is not None:
                 rays_o, rays_d = get_rays(H, W, K, torch.Tensor(pose))  # (H, W, 3), (H, W, 3)
