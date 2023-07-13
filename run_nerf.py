@@ -358,7 +358,7 @@ def render_rays(
 
 
     raw = network_query_fn(pts, viewdirs, network_fn)
-    rgb_coarse, disp_coarse, acc_coarse, weights_coarse, depth_coarse, alpha_coarse = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
+    rgb_coarse, depth_coarse, disp_coarse, acc_coarse, weights_coarse, alpha_coarse = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
 
     if N_importance > 0:
 
@@ -372,19 +372,23 @@ def render_rays(
         run_fn = network_fn if network_fine is None else network_fine
         raw = network_query_fn(pts, viewdirs, run_fn)
 
-        rgb_fine, disp_fine, acc_fine, weights_fine, depth_fine, alpha_fine = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
+        rgb_fine, depth_fine, disp_fine, acc_fine, weights_fine, alpha_fine = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
     ret = {
         'rgb_coarse': rgb_coarse,
+        'depth_coarse': depth_coarse,
         'disp_coarse': disp_coarse,
         'acc_coarse': acc_coarse,
-        'depth_coarse': depth_coarse
+        'weights_coarse': weights_coarse,
+        'alpha_coarse': alpha_coarse
     }
     if N_importance > 0:
         ret.update({
             'rgb_fine': rgb_fine,
+            'depth_fine': depth_fine,
             'disp_fine': disp_fine,
             'acc_fine': acc_fine,
-            'depth_fine': depth_fine,
+            'weights_fine': weights_fine,
+            'alpha_fine': alpha_fine
             'z_std': torch.std(z_samples, dim=-1, unbiased=False)  # [N_rays]
         })
 
@@ -403,10 +407,10 @@ def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False):
         rays_d: [N_rays, 3]. Direction of each ray.
     Returns:
         rgb_map: [N_rays, 3]. Estimated RGB color of a ray.
+        depth_map: [N_rays]. Estimated distance to object.
         disp_map: [N_rays]. Disparity map. Inverse of depth map. 1 / depth.
         acc_map: [N_rays]. Sum of weights along each ray.  Accumulated opacity along each ray.
         weights: [N_rays, num_samples]. Weights assigned to each sampled color.
-        depth_map: [N_rays]. Estimated distance to object.
         alpha: [N_rays, N_samples]. Sigma for every point every ray.
     """
     raw2alpha = lambda raw, dists, act_fn=F.relu: 1.-torch.exp(-act_fn(raw)*dists)
@@ -434,7 +438,7 @@ def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False):
     if white_bkgd:
         rgb_map = rgb_map + (1.-acc_map[...,None])
 
-    return rgb_map, disp_map, acc_map, weights, depth_map, alpha
+    return rgb_map, depth_map, disp_map, acc_map, weights, alpha
 
 
 
