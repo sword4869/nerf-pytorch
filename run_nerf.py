@@ -389,7 +389,7 @@ def render_rays(
             'disp_fine': disp_fine,
             'acc_fine': acc_fine,
             'weights_fine': weights_fine,
-            'alpha_fine': alpha_fine
+            'alpha_fine': alpha_fine,
             'z_std': torch.std(z_samples, dim=-1, unbiased=False)  # [N_rays]
         })
 
