@@ -158,13 +158,14 @@ def batchify(fn, chunk):
 
 ############################ Render Part ########################################
 
-def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0):
+def render_path(hwf, K, chunk, render_poses, render_kwargs, gt_imgs=None, savedir=None, render_factor=0):
     '''
-    渲染多个poses， 可以用来制作视频。render()只能渲染单个pose。
+    渲染多个poses, 可以用来制作视频。render()只能渲染单个pose。
 
     Args:
         - `savedir`: 保存 render_poses 的 rgb图片
-        - `render_facto`: 渲染更小的图片
+        - `render_factor`: 渲染更小的图片
+        - `render_kwargs`: 这里只是传递字典变量
 
     Return: Ndarry
         - `rgbs`
@@ -185,7 +186,7 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
     disps = []
 
     for i, c2w in enumerate(tqdm(render_poses)):
-        ret = render(H, W, K, chunk=chunk, c2w=c2w[:3,:4], **render_kwargs)
+        ret = render(H, W, K, chunk, c2w=c2w[:3,:4], **render_kwargs)
         rgb = ret['rgb_fine'] if render_kwargs['N_importance'] > 0 else ret['rgb_coarse']
         disp = ret['disp_fine'] if render_kwargs['N_importance'] > 0 else ret['disp_coarse']
         rgbs.append(rgb.cpu().numpy())
@@ -683,7 +684,7 @@ def train():
             os.makedirs(testsavedir, exist_ok=True)
             print('test poses shape', render_poses.shape)
 
-            rgbs, _ = render_path(render_poses, hwf, K, args.chunk, render_kwargs_test, gt_imgs=images, savedir=testsavedir, render_factor=args.render_factor)
+            rgbs, _ = render_path(hwf, K, args.chunk, render_poses, render_kwargs_test, gt_imgs=images, savedir=testsavedir, render_factor=args.render_factor)
             print('Done rendering', testsavedir)
             imageio.mimwrite(os.path.join(testsavedir, 'video.mp4'), to8b(rgbs), fps=30, quality=8)
 
@@ -781,7 +782,7 @@ def train():
                 target_s = target[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
 
         #####  Core optimization loop  #####
-        ret = render(H, W, K, chunk=args.chunk, rays=batch_rays, **render_kwargs_train)
+        ret = render(H, W, K, args.chunk, rays=batch_rays, **render_kwargs_train)
 
         optimizer.zero_grad()
         img_loss_coarse = img2mse(ret['rgb_coarse'], target_s)
@@ -831,7 +832,7 @@ def train():
             tqdm.write(f'render poses...')
             # Turn on testing mode
             with torch.no_grad():
-                rgbs, disps = render_path(render_poses, hwf, K, args.chunk, render_kwargs_test)
+                rgbs, disps = render_path(hwf, K, args.chunk, render_poses, render_kwargs_test)
             moviebase = os.path.join(basedir, expname, 'render_poses_{:06d}_'.format(i))
             imageio.mimwrite(moviebase + 'rgb.mp4', to8b(rgbs), fps=30, quality=8)
             imageio.mimwrite(moviebase + 'disp.mp4', to8b(disps / np.max(disps)), fps=30, quality=8)
@@ -842,7 +843,7 @@ def train():
             testsavedir = os.path.join(basedir, expname, 'test_poses_{:06d}'.format(i))
             os.makedirs(testsavedir, exist_ok=True)
             with torch.no_grad():
-                render_path(poses[i_test], hwf, K, args.chunk, render_kwargs_test, gt_imgs=images[i_test], savedir=testsavedir)
+                render_path(hwf, K, args.chunk, poses[i_test], render_kwargs_test, gt_imgs=images[i_test], savedir=testsavedir)
 
         # tensorboard
         writer.add_scalar('loss/train', loss, i)
