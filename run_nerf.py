@@ -22,7 +22,7 @@ DEBUG = False
 ############################ Create NeRF Part ########################################
 
 
-def create_nerf(args):
+def create_nerf(args, near, far):
     """Instantiate NeRF's MLP model.
     """
     # 位置编码 location，由3维变成63维度。
@@ -98,6 +98,8 @@ def create_nerf(args):
         'use_viewdirs' : args.use_viewdirs,
         'white_bkgd' : args.white_bkgd,
         'raw_noise_std' : args.raw_noise_std,
+        'near' : near,
+        'far' : far
     }
 
     # NDC only good for LLFF-style forward facing data
@@ -656,14 +658,7 @@ def train():
             file.write(open(args.config, 'r').read())
 
     # Create nerf model
-    render_kwargs_train, render_kwargs_test, start, grad_vars, optimizer = create_nerf(args)
-
-    bds_dict = {
-        'near' : near,
-        'far' : far,
-    }
-    render_kwargs_train.update(bds_dict)
-    render_kwargs_test.update(bds_dict)
+    render_kwargs_train, render_kwargs_test, start, grad_vars, optimizer = create_nerf(args, near, far)
 
     # Move testing data to GPU
     render_poses = torch.Tensor(render_poses).to(device)

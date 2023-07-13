@@ -79,5 +79,6 @@ disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.ma
 - images 也直接整体 `to(device)`，而不是在用的时候一张一张的
 - 去掉已经`to(device)`的 poses 还 `to(device)` 的tensor操作
 - 重新安排了 create nerf / run nerf / render 的函数排列
+- 将 near far 直接写入了 `create_nerf()`
 - 重新规划了 `render()` 的返回结果, 增加了 depth_map, 明确分为 coarse 和 fine
 - 以及重新写了 psnr 和 loss 的写法
