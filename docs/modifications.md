@@ -81,4 +81,6 @@ disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.ma
 - 重新安排了 create nerf / run nerf / render 的函数排列
 - 将 near far 直接写入了 `create_nerf()`
 - 重新规划了 `render()` 的返回结果, 增加了 depth_map, 明确分为 coarse 和 fine
+- 重新规划了 `render()` 的参数排列，分为与kwargs有关还是无关的
+- `render_rays()`，去掉了 `raw`, 明确本来意思，直接返回 `alpha`
 - 以及重新写了 psnr 和 loss 的写法

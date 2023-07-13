@@ -208,26 +208,28 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
     return rgbs, disps
 
 
-def render(H, W, K, chunk=1024*32, rays=None, c2w=None, ndc=True,
-                  near=0., far=1.,
-                  use_viewdirs=False, c2w_staticcam=None,
-                  **kwargs):
+def render(H, W, K, chunk=1024*32, rays=None, c2w=None, c2w_staticcam=None,
+            ndc=True, near=0., far=1., use_viewdirs=False, 
+            **kwargs): 
     """Render rays
     Args:
-      H: int. Height of image in pixels.
-      W: int. Width of image in pixels.
-      focal: float. Focal length of pinhole camera.
-      chunk: int. Maximum number of rays to process simultaneously. Used to
+    - 不由kwargs解析的:
+    H: int. Height of image in pixels.
+    W: int. Width of image in pixels.
+    K: intrincs parameter of pinhole camera.
+    chunk: int. Maximum number of rays to process simultaneously. Used to
         control maximum memory usage. Does not affect final results.
-      rays: array of shape [2, batch_size, 3]. Ray origin and direction for
+    rays: array of shape [2, batch_size, 3]. Ray origin and direction for
         each example in batch.
-      c2w: array of shape [3, 4]. Camera-to-world transformation matrix.
-      ndc: bool. If True, represent ray origin, direction in NDC coordinates.
-      near: float or array of shape [batch_size]. Nearest distance for a ray.
-      far: float or array of shape [batch_size]. Farthest distance for a ray.
-      use_viewdirs: bool. If True, use viewing direction of a point in space in model.
-      c2w_staticcam: array of shape [3, 4]. If not None, use this transformation matrix for 
-       camera while using other c2w argument for viewing directions.
+    c2w: array of shape [3, 4]. Camera-to-world transformation matrix.
+    c2w_staticcam: array of shape [3, 4]. If not None, use this transformation matrix for 
+    camera while using other c2w argument for viewing directions.
+
+    - 由kwargs解析的:
+    ndc: bool. If True, represent ray origin, direction in NDC coordinates.
+    near: float or array of shape [batch_size]. Nearest distance for a ray.
+    far: float or array of shape [batch_size]. Farthest distance for a ray.
+    use_viewdirs: bool. If True, use viewing direction of a point in space in model.
 
     Returns: Tensor
         将 render_rays() 的各变量，返回特定的shape。
@@ -267,6 +269,7 @@ def render(H, W, K, chunk=1024*32, rays=None, c2w=None, ndc=True,
         rays = torch.cat([rays, viewdirs], -1)
 
     # Render and reshape
+    # 此时的kwargs是不包含ndc, near, far, use_viewdirs的
     all_ret = batchify_rays(rays, chunk, **kwargs)
     for k in all_ret:
         # ( [ H, W ] or [ N_rand ] ) + ( [3] or [] )
@@ -286,9 +289,9 @@ def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
         for k in ret:
             if k not in all_ret:
                 all_ret[k] = []
-            # {'rgb': [rgb1, rgb2, ..., rgb_num_chunk]}, num_chunk 表示根据 chunk 划分的块数, rgb_i: [num_rays, 3]
+            # {'rgb': [rgb1, rgb2, ..., rgb_num_chunk]}, num_chunk 表示根据 chunk 划分的块数, rgb_i: [N_rays, 3]
             all_ret[k].append(ret[k])
-    # {'rgb': rgbs}. rgbs: [num_chunk * num_rays, 3]
+    # {'rgb': rgbs}. rgbs: [num_chunk * N_rays, 3]
     all_ret = {k : torch.cat(all_ret[k], 0) for k in all_ret}
     return all_ret
 
@@ -314,8 +317,6 @@ def render_rays(
         in space.
       network_query_fn: function used for passing queries to network_fn.
       N_samples: int. Number of different times to sample along each ray.
-      retraw: bool. If True, include model's raw, unprocessed predictions.
-        its meaning is the abbreviation of return raw.
       lindisp: bool. If True, sample linearly in inverse depth rather than in depth.
       perturb: float, 0 or 1. If non-zero, each ray is sampled at stratified
         random points in time.
@@ -324,11 +325,10 @@ def render_rays(
       network_fine: "fine" network with same spec as network_fn.
       white_bkgd: bool. If True, assume a white background.
       raw_noise_std: ...
-      verbose: bool. If True, print more debugging info.
     Returns:
         { rgb_coarse, disp_coarse, acc_coarse, depth_coarse | rgb_fine, disp_fine, acc_fine, depth_fine, z_std }
         { coase                                             | fine: N_import>0                                 }
-        z_std: [num_rays]. Standard deviation of distances along ray for each sample.
+        z_std: [N_rays]. Standard deviation of distances along ray for each sample.
     """
     N_rays = ray_batch.shape[0]
     rays_o, rays_d = ray_batch[:,0:3], ray_batch[:,3:6] # [N_rays, 3] each
@@ -358,7 +358,7 @@ def render_rays(
 
 
     raw = network_query_fn(pts, viewdirs, network_fn)
-    rgb_coarse, disp_coarse, acc_coarse, weights_coarse, depth_coarse = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
+    rgb_coarse, disp_coarse, acc_coarse, weights_coarse, depth_coarse, alpha_coarse = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
 
     if N_importance > 0:
 
@@ -372,7 +372,7 @@ def render_rays(
         run_fn = network_fn if network_fine is None else network_fine
         raw = network_query_fn(pts, viewdirs, run_fn)
 
-        rgb_fine, disp_fine, acc_fine, weights_fine, depth_fine = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
+        rgb_fine, disp_fine, acc_fine, weights_fine, depth_fine, alpha_fine = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
     ret = {
         'rgb_coarse': rgb_coarse,
         'disp_coarse': disp_coarse,
@@ -398,15 +398,16 @@ def render_rays(
 def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False):
     """Transforms model's predictions to semantically meaningful values.
     Args:
-        raw: [num_rays, num_samples along ray, 4]. Prediction from model.
-        z_vals: [num_rays, num_samples along ray]. Integration time.
-        rays_d: [num_rays, 3]. Direction of each ray.
+        raw: [N_rays, num_samples along ray, 4]. Prediction from model.
+        z_vals: [N_rays, num_samples along ray]. Integration time.
+        rays_d: [N_rays, 3]. Direction of each ray.
     Returns:
-        rgb_map: [num_rays, 3]. Estimated RGB color of a ray.
-        disp_map: [num_rays]. Disparity map. Inverse of depth map. 1 / depth.
-        acc_map: [num_rays]. Sum of weights along each ray.  Accumulated opacity along each ray.
-        weights: [num_rays, num_samples]. Weights assigned to each sampled color.
-        depth_map: [num_rays]. Estimated distance to object.
+        rgb_map: [N_rays, 3]. Estimated RGB color of a ray.
+        disp_map: [N_rays]. Disparity map. Inverse of depth map. 1 / depth.
+        acc_map: [N_rays]. Sum of weights along each ray.  Accumulated opacity along each ray.
+        weights: [N_rays, num_samples]. Weights assigned to each sampled color.
+        depth_map: [N_rays]. Estimated distance to object.
+        alpha: [N_rays, N_samples]. Sigma for every point every ray.
     """
     raw2alpha = lambda raw, dists, act_fn=F.relu: 1.-torch.exp(-act_fn(raw)*dists)
 
@@ -433,7 +434,7 @@ def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False):
     if white_bkgd:
         rgb_map = rgb_map + (1.-acc_map[...,None])
 
-    return rgb_map, disp_map, acc_map, weights, depth_map
+    return rgb_map, disp_map, acc_map, weights, depth_map, alpha
 
 
 
