@@ -714,7 +714,6 @@ def train():
         i_batch = 0
 
     # Move training data to GPU
-    images = torch.Tensor(images).to(device)
     poses = torch.Tensor(poses).to(device)
     if use_batching:
         rays_rgb = torch.Tensor(rays_rgb).to(device)
@@ -753,11 +752,11 @@ def train():
         else:
             # Random from one image
             img_i = np.random.choice(i_train)
-            target = images[img_i]
+            target = torch.Tensor(images[img_i]).to(device)
             pose = poses[img_i, :3, :4]
 
             if N_rand is not None:
-                rays_o, rays_d = get_rays(H, W, K, torch.Tensor(pose))  # (H, W, 3), (H, W, 3)
+                rays_o, rays_d = get_rays(H, W, K, pose)  # (H, W, 3), (H, W, 3)
 
                 if i < args.precrop_iters:
                     dH = int(H//2 * args.precrop_frac)
@@ -850,7 +849,7 @@ def train():
         writer.add_scalar('psnr/train', psnr, i)
         if i%args.i_img==0:
             img_i = np.random.choice(i_val)
-            target = images[img_i]
+            target = torch.Tensor(images[img_i]).to(device)
             c2w = poses[img_i]
             with torch.no_grad():
                 ret = render(H, W, K, chunk=args.chunk, c2w=c2w, **render_kwargs_test)
