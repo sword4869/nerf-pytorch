@@ -850,9 +850,8 @@ def train():
         if i%args.i_img==0:
             img_i = np.random.choice(i_val)
             target = torch.Tensor(images[img_i]).to(device)
-            c2w = poses[img_i]
             with torch.no_grad():
-                ret = render(H, W, K, chunk=args.chunk, c2w=c2w, **render_kwargs_test)
+                ret = render(H, W, K, chunk=args.chunk, c2w=poses[img_i], **render_kwargs_test)
             img_loss_coarse = img2mse(ret['rgb_coarse'], target)
             # coarse和fine 的都是分开算的
             psnr_coarse = mse2psnr(img_loss_coarse)
