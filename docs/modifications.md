@@ -85,3 +85,4 @@ disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.ma
 - `render_rays()`，去掉了 `raw`, 明确本来意思，直接返回 `alpha`
 - 以及重新写了 psnr 和 loss 的写法
 - `render_path()`的 参数排列，让 `render_kwargs` 靠后， 与`render()`保持大致一致
+- 重新写了`batchify()`，让其的位置编码也chunk化，来防止OOM，且现在的`netchunk`就是指点的数量，而不是光线的数量。

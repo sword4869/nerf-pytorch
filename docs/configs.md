@@ -40,6 +40,8 @@
 
 ![图 5](../images/327f572110e7a25d4a87bd7ffc5548dda4be85aea371aa5c2246e9574b3793d1.png)  
 
+`netchunk`: 用于 train中，1024是N_rand的光线数量，64是最低的粗网络的采样数。所以在`batchify()`中的for循环索引不会溢出。
+
 #### 1.1.5.1. no_batching
 
 <https://github.com/yenchenlin/nerf-pytorch/issues/6>

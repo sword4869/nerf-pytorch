@@ -124,36 +124,33 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
         viewdirs: (N_rays, 3)
         fn: model
         embed_fn, embeddirs_fn: embedder's function
-        netchunk: chunk for run network
-    Prepares inputs and applies network 'fn'.
-    1. embed `inputs` and `viewdirs` -> `embedded`
-    2. batchify
+        netchunk: 在修改后的意思是每次只处理netchunk个点, 而不是原来的光线数量。
     """
-    # (N_rays * N_points_per_ray, 3)
-    inputs_flat = torch.reshape(inputs, [-1, inputs.shape[-1]])
-    embedded = embed_fn(inputs_flat)
 
-    if viewdirs is not None:
-        input_dirs = viewdirs[:,None].expand(inputs.shape)
-        input_dirs_flat = torch.reshape(input_dirs, [-1, input_dirs.shape[-1]])
-        embedded_dirs = embeddirs_fn(input_dirs_flat)
-        embedded = torch.cat([embedded, embedded_dirs], -1)
+    N_rays, N_points_per_ray, _ = inputs.shape
+    chunk = netchunk // N_points_per_ray
+    raws = []
+    for i in range(0, N_rays, chunk):
+        next_i = min(i + chunk, N_rays) 
+        inputs_chunk = inputs[i:next_i]                                                         # (chunk, N_points_per_ray, 3)
+        viewdirs_chunk = viewdirs[i:next_i]                                                     # (chunk, 3)
+        chunk_rays = inputs_chunk.shape[0]
 
-    # fn(embedded)  or ret(embedded)
-    # (N_rays * N_points_per_ray, 4)
-    outputs_flat = batchify(fn, netchunk)(embedded)
+        inputs_flat = torch.reshape(inputs_chunk, [-1, 3])                                      # (chunk * N_points_per_ray, 3)
+        embedded = embed_fn(inputs_flat)                                                        # (chunk * N_points_per_ray, 64)
+
+        if viewdirs is not None:
+            input_dirs = viewdirs_chunk[:,None].expand([chunk_rays, N_points_per_ray, 3])       # (chunk, N_points_per_ray, 3)
+            input_dirs_flat = torch.reshape(input_dirs, [-1, 3])                                # (chunk * N_points_per_ray, 3)
+            embedded_dirs = embeddirs_fn(input_dirs_flat)                                       # (chunk * N_points_per_ray, 27)
+            embedded = torch.cat([embedded, embedded_dirs], -1)                                 # (chunk * N_points_per_ray, 91)
+
+        raw = fn(embedded)
+        raws.append(raw)
+    outputs_flat = torch.cat(raws, 0)
     # (N_rays, N_points_per_ray, 4)
     outputs = torch.reshape(outputs_flat, list(inputs.shape[:-1]) + [outputs_flat.shape[-1]])
     return outputs
-
-def batchify(fn, chunk):
-    """Constructs a version of 'fn' that applies to smaller batches.
-    """
-    if chunk is None:
-        return fn
-    def ret(inputs):
-        return torch.cat([fn(inputs[i:i+chunk]) for i in range(0, inputs.shape[0], chunk)], 0)
-    return ret
 
 
 ############################ Render Part ########################################
@@ -210,8 +207,8 @@ def render_path(hwf, K, chunk, render_poses, render_kwargs, gt_imgs=None, savedi
 
 
 def render(H, W, K, chunk=1024*32, rays=None, c2w=None, c2w_staticcam=None,
-            ndc=True, near=0., far=1., use_viewdirs=False, 
-            **kwargs): 
+            ndc=True, near=0., far=1., use_viewdirs=False,
+            **kwargs):
     """Render rays
     Args:
     - 不由kwargs解析的:
@@ -787,14 +784,14 @@ def train():
         img_loss_coarse = img2mse(ret['rgb_coarse'], target_s)
         # coarse和fine 的都是分开算的
         psnr_coarse = mse2psnr(img_loss_coarse)
-        loss = img_loss_coarse 
+        loss = img_loss_coarse
 
         if args.N_importance > 0:
             img_loss_fine = img2mse(ret['rgb_fine'], target_s)
             loss = loss + img_loss_fine
             psnr_fine = mse2psnr(img_loss_fine)
         psnr = psnr_fine if args.N_importance > 0 else psnr_coarse
-        
+
 
         loss.backward()
         optimizer.step()
@@ -808,7 +805,7 @@ def train():
             param_group['lr'] = new_lrate
         ################################
 
-        
+
         # print
         if i%args.i_print==0:
             tqdm.write(f"[TRAIN] Iter: {i} Loss: {loss.item()}  PSNR: {psnr.item()}")
@@ -855,7 +852,7 @@ def train():
             img_loss_coarse = img2mse(ret['rgb_coarse'], target)
             # coarse和fine 的都是分开算的
             psnr_coarse = mse2psnr(img_loss_coarse)
-            loss = img_loss_coarse 
+            loss = img_loss_coarse
 
             if args.N_importance > 0:
                 img_loss_fine = img2mse(ret['rgb_fine'], target)
