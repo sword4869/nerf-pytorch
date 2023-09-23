@@ -89,7 +89,7 @@ You can download the pre-trained models [here](https://drive.google.com/drive/fo
 
 ```bash
 ├── logs 
-│   ├── fern_test
+│   ├── <expname in config>
 │   ├── flower_test  # downloaded logs
 │   ├── trex_test    # downloaded logs
 ```
