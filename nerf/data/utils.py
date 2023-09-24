@@ -146,6 +146,40 @@ def minify(basedir, factors=[], resolutions=[]):
             io.imsave(os.path.join(imgdir, img_names[i]), imgs_down)
 
 
+# Ray helpers
+def get_rays(H, W, K, c2w):
+    # 因为 pytorch's meshgrid 的indexing不同，所以这三行只是在等效 np.meshgrid，直接看get_rays_np
+    i, j = torch.meshgrid(torch.linspace(0, W-1, W), torch.linspace(0, H-1, H), indexing='xy')
+    dirs = torch.stack([(i-K[0][2])/K[0][0], -(j-K[1][2])/K[1][1], -torch.ones_like(i)], -1)
+    # Rotate ray directions from camera frame to the world frame
+    rays_d = torch.sum(dirs[..., np.newaxis, :] * c2w[:3,:3], -1)  # dot product, equals to: [c2w.dot(dir) for dir in dirs]
+    # Translate camera frame's origin to the world frame. It is the origin of all rays.
+    rays_o = c2w[:3,-1].expand(rays_d.shape)
+    return rays_o, rays_d
+
+
+def get_rays_np(H, W, K, c2w):
+    '''
+    给定一张图像的一个像素点，我们的目标是构造以相机中心为起始点，经过相机中心和像素点的射线。
+    @param H,W :图像的宽、高
+    @param K: 内参
+    @param c2w : 外参，[3,4], `c2w[:3,-1]`最后一列需要是t
+    @return rays_o: (H, W, 3). HxW个光线在世界坐标中的起点位置, 即HxW个一样的三个坐标。
+    @return rays_d: (H, W, 3). HxW个光线dirs。
+    '''
+    # input: (W, H)， output: (H, W)，行坐标有W个，纵坐标有H个。
+    i, j = np.meshgrid(np.linspace(0, W-1, W), np.linspace(0, H-1, H), indexing='xy')
+    # 射线方向 + 不同的相机坐标系转化
+    # (378, 504, 3)：相机坐标下，每个坐标对应三个值来表示射线方向
+    dirs = np.stack([(i-K[0][2])/K[0][0], -(j-K[1][2])/K[1][1], -np.ones_like(i)], -1)
+    # Rotate ray directions from camera frame to the world frame
+    # (378, 504, 1, 3) * (3, 3) = (378, 504, 3, 3)， 最后一个维度 (378, 504, 3)
+    # 相当于 rays_d = (dirs[..., np.newaxis, :] @ c2w[:3,:3].T).transpose(0,1,3,2).squeeze(-1)
+    rays_d = np.sum(dirs[..., np.newaxis, :] * c2w[:3,:3], -1)  # dot product, equals to: [c2w.dot(dir) for dir in dirs]
+    # Translate camera frame's origin to the world frame. It is the origin of all rays.
+    rays_o = np.broadcast_to(c2w[:3,-1], np.shape(rays_d))
+    return rays_o, rays_d
+
 if __name__ == '__main__':
     render_poses = [pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, 40+1)[:-1]]
     render_poses = np.stack(render_poses, 0)

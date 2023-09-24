@@ -4,6 +4,7 @@ model:
     D: 8
     W: 256
     input_ch: 3
+    input_ch_views: 3
     skips: [4]
     use_viewdirs: True
     multires: 10
@@ -15,6 +16,7 @@ model_fine:
     D: 8
     W: 256
     input_ch: 3
+    input_ch_views: 3
     skips: [4]
     use_viewdirs: True
     multires: 10

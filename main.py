@@ -35,4 +35,10 @@ def train():
 
     optimizer = torch.optim.Adam(params=grad_vars, lr=lrate, betas=(0.9, 0.999))
 
-    
+    global_step = 0
+    for epoch in range(epoch_num):
+        for i, batch in dataloader:
+            rays_rgb = batch['rays_rgb'].to(device)
+            pts = batch['pts'].to(device)
+            viewdirs = batch['viewdirs'].to(device)
+            
