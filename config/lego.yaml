@@ -1,0 +1,48 @@
+model:
+  target: nerf.models.nerf.NeRF
+  params:
+    D: 8
+    W: 256
+    input_ch: 3
+    skips: [4]
+    use_viewdirs: True
+    multires: 10
+    multires_views: 4
+  
+model_fine:
+  target: nerf.models.nerf.NeRF
+  params:
+    D: 8
+    W: 256
+    input_ch: 3
+    skips: [4]
+    use_viewdirs: True
+    multires: 10
+    multires_views: 4
+  
+
+data:
+  target: nerf.data.blender_dataset.BlenderDataset
+  params: 
+    white_bkgd: True
+    factor: 2
+    near: 2
+    far: 6
+
+train:
+  lrate: 5e-4
+  lrate_decay: 0.1
+  N_rand: 4096
+  N_samples: 64
+  N_importance: 128
+  perturb: True
+  raw_noise_std: 0.0
+  precrop_iters: 0
+  precrop_frac: 0.5
+
+test:
+  N_rand: 4096
+  N_samples: 64
+  N_importance: 128
+  perturb: False
+  raw_noise_std: 0.0
