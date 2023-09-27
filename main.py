@@ -18,15 +18,16 @@ def train(global_step):
     dataloader_train_without_precrop = torch.utils.data.DataLoader(dataset_train_without_precrop, **config['data']['train']['dataloader_params'])
     print(f'* Dataset loaded. Train rays {len(dataset_train_without_precrop)}')
 
-    def loader(global_step, dataloader_train):
-        into_condition = global_step <= config['setting']['precrop_iters']
-        print('* Train precrop: ', into_condition)
+    def loader(global_step, dataloader_train, precrop):
+        print('* Train precrop: ', precrop)
         pbar = tqdm(dataloader_train)
         for i, batch in enumerate(pbar):
-            if into_condition and global_step > config['setting']['precrop_iters']:
-                break
-            elif global_step > config['setting']['step_num']:
-                break
+            if precrop:
+                if global_step > config['setting']['precrop_iters']:
+                    break
+            else:
+                if global_step > config['setting']['step_num']:
+                    break
 
             global_step += 1
             pbar.set_description(f'{global_step} // {step_num}')
@@ -47,8 +48,8 @@ def train(global_step):
 
         return global_step
     
-    global_step = loader(global_step, dataloader_train_precrop)
-    global_step = loader(global_step, dataloader_train_without_precrop)
+    global_step = loader(global_step, dataloader_train_precrop, precrop=True)
+    global_step = loader(global_step, dataloader_train_without_precrop, precrop=False)
 
 
 @torch.no_grad()
@@ -85,6 +86,10 @@ def test(global_step):
     test_dir = f'{logdir}/test_{global_step}'
     os.makedirs(test_dir, exist_ok=True)
 
+    dataset_test = BlenderPrecropRayDataset(split='test', **config['data']['params'])
+    dataloader_test = torch.utils.data.DataLoader(dataset_test, **config['data']['test']['dataloader_params'])
+    print(f'* Dataset loaded. Test rays {len(dataset_test)}')
+
     rgb_original_buffer = ImgBuffer(dataloader_test.dataset.H, dataloader_test.dataset.W)
     rgb_coarse_buffer = ImgBuffer(dataloader_test.dataset.H, dataloader_test.dataset.W)
     rgb_fine_buffer = ImgBuffer(dataloader_test.dataset.H, dataloader_test.dataset.W)
@@ -108,12 +113,7 @@ if __name__ == '__main__':
     logdir = config['setting']['logdir']
     os.makedirs(logdir, exist_ok=True)
 
-
     dataset_val = BlenderPrecropRayDataset(split='val', **config['data']['params'])
-
-    dataset_test = BlenderPrecropRayDataset(split='test', **config['data']['params'])
-    dataloader_test = torch.utils.data.DataLoader(dataset_test, **config['data']['test']['dataloader_params'])
-    print(f'* Dataset loaded. Test rays {len(dataset_test)}')
 
     model_coarse = NeRF(**config['model_coarse']['params']).to(device)
     model_fine = NeRF(**config['model_fine']['params']).to(device)
@@ -132,5 +132,5 @@ if __name__ == '__main__':
         print(f'* global_step: {global_step}')
 
     render = Render(model_coarse, model_fine, **config['render']['params'])
-    # train(global_step)
-    test(global_step)
+    train(global_step)
+    # test(global_step)

@@ -1,33 +1,9 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
 from einops import repeat
+from torch import nn
 
-
-class PositionalEmbedder():
-    def __init__(self, multires, include_input=True, log_sampling=True):
-        if log_sampling:
-            self.freq_bands = 2 ** torch.linspace(0, multires - 1, steps=multires)  # [multires]
-        else:
-            self.freq_bands = torch.linspace(2. ** 0., 2. ** (multires - 1), steps=multires)
-
-        self.include_input = include_input
-        self.embed_num = 2 * multires + 1 if include_input else 2 * multires
-
-    def __call__(self, x):
-        for i, freq in enumerate(self.freq_bands.to(x.device)):
-            if i == 0:
-                y = torch.concat([torch.sin(x * freq), torch.cos(x * freq)], dim=-1)
-            else:
-                y = torch.concat([y, torch.sin(x * freq), torch.cos(x * freq)], dim=-1)
-
-        if self.include_input:
-            y = torch.cat([x, y], dim=-1)
-
-        return y
-
-    def cal_outdim(self, input_dims):
-        return input_dims * self.embed_num
+from .embedder import PositionalEmbedder
 
 
 class NeRF(nn.Module):
@@ -55,9 +31,9 @@ class NeRF(nn.Module):
         self.pts_linears = nn.ModuleList(
             [nn.Linear(input_ch, W)] + [nn.Linear(W, W) if i not in self.skips else nn.Linear(W + input_ch, W) for i in range(D-1)]
         )
-        self.alpha_linear = nn.Linear(W, 1) 
-        self.feature_linear = nn.Linear(W, W)
         self.views_linears = nn.ModuleList([nn.Linear(input_ch_views + W, W // 2)])
+        self.feature_linear = nn.Linear(W, W)
+        self.alpha_linear = nn.Linear(W, 1)
         self.rgb_linear = nn.Linear(W // 2, 3)
 
         self.raw_noise_std = raw_noise_std
@@ -87,14 +63,14 @@ class NeRF(nn.Module):
 
         rgb = self.rgb_linear(h)        # (N_rays, N_samples, 3)
         rgb = F.sigmoid(rgb)
-        
+
         return self.raw2outputs(rgb, sigma, z_vals, viewdirs_norm)
 
     def raw2outputs(self, rgb, sigma, z_vals, viewdirs_norm):
         device = z_vals.device
 
         dists = z_vals[..., 1:] - z_vals[..., :-1]      # [N_rays, N_samples - 1]
-        dists = torch.cat([dists, torch.Tensor([1e10]).expand(dists[...,:1].shape).to(device)], -1)  # [N_rays, N_samples]
+        dists = torch.cat([dists, torch.Tensor([1e10]).expand(dists[..., :1].shape).to(device)], -1)  # [N_rays, N_samples]
         dists = dists * viewdirs_norm    # [N_rays, N_samples] * [N_rays, 1] = [N_rays, N_samples]
 
         if self.raw_noise_std > 0.:
@@ -110,7 +86,8 @@ class NeRF(nn.Module):
         depth_map = torch.sum(weights * z_vals, -1)
         # MODIFY
         acc_map = torch.sum(weights, -1)
-        disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map, device=device), depth_map / torch.max(1e-10 * torch.ones_like(acc_map, device=device), acc_map))
+        disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map, device=device),
+                                depth_map / torch.max(1e-10 * torch.ones_like(acc_map, device=device), acc_map))
 
         if self.white_bkgd:
             rgb_map = rgb_map + (1.-acc_map[..., None])
