@@ -6,3 +6,5 @@ configs/*
 data/*
 !data
 runs
+*.pt
+*.pth

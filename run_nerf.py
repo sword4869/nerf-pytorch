@@ -9,10 +9,10 @@ from tqdm import tqdm, trange
 
 from run_nerf_helpers import *
 
-from load_llff import load_llff_data
-from load_deepvoxels import load_dv_data
-from nerf.data.load_blender import load_blender_data
-from load_LINEMOD import load_LINEMOD_data
+# from load_llff import load_llff_data
+# from load_deepvoxels import load_dv_data
+from load_blender import load_blender_data
+# from load_LINEMOD import load_LINEMOD_data
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -128,7 +128,9 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     """
 
     N_rays, N_points_per_ray, _ = inputs.shape
-    chunk = netchunk // N_points_per_ray
+    # chunk = netchunk // N_points_per_ray
+    print(inputs.shape)
+    chunk = 1024*32
     raws = []
     for i in range(0, N_rays, chunk):
         next_i = min(i + chunk, N_rays) 
@@ -138,13 +140,14 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
 
         inputs_flat = torch.reshape(inputs_chunk, [-1, 3])                                      # (chunk * N_points_per_ray, 3)
         embedded = embed_fn(inputs_flat)                                                        # (chunk * N_points_per_ray, 64)
+        torch.save(embedded, 'input_pts_raw.pt')
 
         if viewdirs is not None:
             input_dirs = viewdirs_chunk[:,None].expand([chunk_rays, N_points_per_ray, 3])       # (chunk, N_points_per_ray, 3)
             input_dirs_flat = torch.reshape(input_dirs, [-1, 3])                                # (chunk * N_points_per_ray, 3)
             embedded_dirs = embeddirs_fn(input_dirs_flat)                                       # (chunk * N_points_per_ray, 27)
             embedded = torch.cat([embedded, embedded_dirs], -1)                                 # (chunk * N_points_per_ray, 91)
-
+            torch.save(embedded_dirs, 'input_views_raw.pt')
         raw = fn(embedded)
         raws.append(raw)
     outputs_flat = torch.cat(raws, 0)
@@ -356,6 +359,8 @@ def render_rays(
 
 
     raw = network_query_fn(pts, viewdirs, network_fn)
+    torch.save(raw, 'raw.pth')
+    breakpoint()
     rgb_coarse, depth_coarse, disp_coarse, acc_coarse, weights_coarse, alpha_coarse = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd)
 
     if N_importance > 0:
