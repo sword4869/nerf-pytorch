@@ -1,6 +1,7 @@
 **/.ipynb_checkpoints
 **/__pycache__
 logs/*
+lightning_logs/*
 nerf_example_data/*
 configs/*
 data/*

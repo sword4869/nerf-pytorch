@@ -1,7 +1,7 @@
 data:
   target: nerf.data.blender_dataset.BlenderPrecropRayDataset
   params: 
-    basedir: 'data/nerf_synthetic/lego'
+    basedir: 'data/nerf_synthetic/chair'
     factor: 2
     skip: 1
     white_bkgd: True
@@ -21,7 +21,7 @@ data:
   val:
     other_params:
       batch_size: 1024
-      count: 1
+      count: 3
 
 
 model_coarse:
@@ -61,11 +61,10 @@ render:
 
 setting:
   device: 1
-  logdir: logs/blender_paper_lego
+  logdir: logs/blender_paper_chair_test
   lr: 5e-4
-  ckpt: logs/blender_paper_lego/200000.tar
-  # ckpt: 
-  step_num: 250000
-  precrop_iters: 500
+  ckpt: 
+  step_num: 200000
+  precrop_iters: 1000
   i_val: 10000
   i_ckpt: 50000

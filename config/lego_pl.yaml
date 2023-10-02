@@ -13,15 +13,17 @@ data:
       batch_size: 1024
       shuffle: True
       num_workers: 8
+  val:
+    dataloader_params:
+      batch_size: 1024
+      shuffle: False
+      num_workers: 8
+    count: 2
   test:
     dataloader_params:
       batch_size: 1024
       shuffle: False
       num_workers: 8
-  val:
-    other_params:
-      batch_size: 1024
-      count: 1
 
 
 model_coarse:
@@ -63,7 +65,7 @@ setting:
   device: 1
   logdir: logs/blender_paper_lego
   lr: 5e-4
-  ckpt: logs/blender_paper_lego/200000.tar
+  ckpt: 
   # ckpt: 
   step_num: 250000
   precrop_iters: 500

@@ -4,9 +4,9 @@ import torch.nn.functional as F
 from omegaconf import OmegaConf
 from tqdm import tqdm
 from nerf.modules.render import Render
-from nerf.model.nerf import NeRF
+from nerf.model.nerf import Nerf
 from nerf.data.blender_dataset import BlenderPrecropRayDataset
-from nerf.utils import ImgBuffer
+from nerf.utils import ImgBufferHub
 import numpy as np
 
 def train(global_step):
@@ -20,33 +20,48 @@ def train(global_step):
 
     def loader(global_step, dataloader_train, precrop):
         print('* Train precrop: ', precrop)
-        pbar = tqdm(dataloader_train)
-        for i, batch in enumerate(pbar):
-            if precrop:
-                if global_step > config['setting']['precrop_iters']:
-                    break
-            else:
-                if global_step > config['setting']['step_num']:
-                    break
+        while True:
+            pbar = tqdm(dataloader_train)
+            for i, batch in enumerate(pbar):
+                if precrop:
+                    if global_step > config['setting']['precrop_iters']:
+                        return global_step
+                else:
+                    if global_step > config['setting']['step_num']:
+                        return global_step
 
-            global_step += 1
-            pbar.set_description(f'{global_step} // {step_num}')
-            
-            rgb_original = batch['rgb_original'].to(device)
-            rays_o = batch['rays_o'].to(device)
-            rays_d = batch['rays_d'].to(device)
-            rgb_coarse, rgb_fine, depth_coarse, depth_fine, disp_coarse, disp_fine, acc_coarse, acc_fine, weights_coarse, weights_fine, alpha_coarse, alpha_fine = render.render_rays(
-                rays_o, rays_d)
-            loss = F.mse_loss(rgb_coarse, rgb_original) + F.mse_loss(rgb_fine, rgb_original)
-            pbar.set_postfix({'loss': loss.item()})
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+                global_step += 1
+                pbar.set_description(f'{global_step} // {step_num}')
+                
+                rgb_original = batch['rgb_original'].to(device)
+                rays_o = batch['rays_o'].to(device)
+                rays_d = batch['rays_d'].to(device)
+                rgb_coarse, rgb_fine, depth_coarse, depth_fine, disp_coarse, disp_fine, acc_coarse, acc_fine, weights_coarse, weights_fine, alpha_coarse, alpha_fine = render.render_rays(
+                    rays_o, rays_d)
+                loss_coarse = F.mse_loss(rgb_coarse, rgb_original)
+                loss_fine = F.mse_loss(rgb_fine, rgb_original)
+                loss = loss_coarse + loss_fine
+                pbar.set_postfix({
+                    'loss': loss.item(),
+                    'loss_coarse': loss_coarse.item(),
+                    'loss_fine': loss_fine.item()
+                })
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
 
-            if global_step % config['setting']['i_val'] == 0:
-                val(global_step)
+                if global_step % config['setting']['i_val'] == 0:
+                    val(global_step)
 
-        return global_step
+                if global_step % config['setting']['i_ckpt'] == 0:
+                    ckpt = {
+                        'global_step': global_step,
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'network_fn_state_dict': render.model_coarse.state_dict(),
+                        'network_fine_state_dict': render.model_fine.state_dict()
+                    }
+                    torch.save(ckpt, f'{global_step}.pt')
+
     
     global_step = loader(global_step, dataloader_train_precrop, precrop=True)
     global_step = loader(global_step, dataloader_train_without_precrop, precrop=False)
@@ -59,9 +74,7 @@ def val(global_step):
 
     H, W = dataset_val.H, dataset_val.W
 
-    rgb_original_buffer = ImgBuffer(H, W)
-    rgb_coarse_buffer = ImgBuffer(H, W)
-    rgb_fine_buffer = ImgBuffer(H, W)
+    img_buffer_hub = ImgBufferHub(H, W)
 
     assert len(dataset_val) % (H * W) == 0
     N_img = len(dataset_val) // (H * W)
@@ -76,10 +89,7 @@ def val(global_step):
             rgb_coarse, rgb_fine, depth_coarse, depth_fine, disp_coarse, disp_fine, acc_coarse, acc_fine, weights_coarse, weights_fine, alpha_coarse, alpha_fine = render.render_rays(
                 rays_o, rays_d)
 
-            rgb_original_buffer.update(rgb_original, f'{val_dir}/rgb_original')
-            rgb_coarse_buffer.update(rgb_coarse, f'{val_dir}/rgb_coarse')
-            rgb_fine_buffer.update(rgb_fine, f'{val_dir}/rgb_fine')
-
+            img_buffer_hub.update(val_dir, rgb_original=rgb_original, rgb_coarse=rgb_coarse, rgb_fine=rgb_fine, disp_coarse=disp_coarse, disp_fine=disp_fine)
 
 @torch.no_grad()
 def test(global_step):
@@ -90,9 +100,9 @@ def test(global_step):
     dataloader_test = torch.utils.data.DataLoader(dataset_test, **config['data']['test']['dataloader_params'])
     print(f'* Dataset loaded. Test rays {len(dataset_test)}')
 
-    rgb_original_buffer = ImgBuffer(dataloader_test.dataset.H, dataloader_test.dataset.W)
-    rgb_coarse_buffer = ImgBuffer(dataloader_test.dataset.H, dataloader_test.dataset.W)
-    rgb_fine_buffer = ImgBuffer(dataloader_test.dataset.H, dataloader_test.dataset.W)
+    H, W = dataset_test.H, dataset_test.W
+
+    img_buffer_hub = ImgBufferHub(H, W)
 
     for i, batch in enumerate(tqdm(dataloader_test)):
         rgb_original = batch['rgb_original'].to(device)
@@ -101,9 +111,7 @@ def test(global_step):
         rgb_coarse, rgb_fine, depth_coarse, depth_fine, disp_coarse, disp_fine, acc_coarse, acc_fine, weights_coarse, weights_fine, alpha_coarse, alpha_fine = render.render_rays(
             rays_o, rays_d)
 
-        rgb_original_buffer.update(rgb_original, f'{test_dir}/rgb_original')
-        rgb_coarse_buffer.update(rgb_coarse, f'{test_dir}/rgb_coarse')
-        rgb_fine_buffer.update(rgb_fine, f'{test_dir}/rgb_fine')
+        img_buffer_hub.update(test_dir, rgb_original=rgb_original, rgb_coarse=rgb_coarse, rgb_fine=rgb_fine)
 
 
 if __name__ == '__main__':
@@ -115,8 +123,8 @@ if __name__ == '__main__':
 
     dataset_val = BlenderPrecropRayDataset(split='val', **config['data']['params'])
 
-    model_coarse = NeRF(**config['model_coarse']['params']).to(device)
-    model_fine = NeRF(**config['model_fine']['params']).to(device)
+    model_coarse = Nerf(**config['model_coarse']['params']).to(device)
+    model_fine = Nerf(**config['model_fine']['params']).to(device)
     grad_vars = list(model_coarse.parameters()) + list(model_fine.parameters())
     optimizer = torch.optim.Adam(params=grad_vars, lr=config['setting']['lr'], betas=(0.9, 0.999))
 
@@ -132,5 +140,5 @@ if __name__ == '__main__':
         print(f'* global_step: {global_step}')
 
     render = Render(model_coarse, model_fine, **config['render']['params'])
-    train(global_step)
+    # train(global_step)
     # test(global_step)
