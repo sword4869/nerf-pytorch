@@ -95,10 +95,9 @@ class BlenderPrecropRayDataset(BlenderImageDataset):
         skip,
         white_bkgd,
         precrop_frac=None,
-        N_rand=None
     ):
         self._load_blender_data(split, basedir, factor, skip, white_bkgd)
-        self._load_ray(precrop_frac, N_rand)
+        self._load_ray(precrop_frac)
 
     def __len__(self):
         return len(self.rgb_original)
@@ -110,7 +109,7 @@ class BlenderPrecropRayDataset(BlenderImageDataset):
             'rays_d': self.rays_d[idx],
         }
 
-    def _load_ray(self, precrop_frac, N_rand):
+    def _load_ray(self, precrop_frac):
         rays_o = []
         rays_d = []
         rgb_original = []
@@ -119,7 +118,7 @@ class BlenderPrecropRayDataset(BlenderImageDataset):
             pose = torch.FloatTensor(self.poses[i][:3, :4])
             ray_o, ray_d = get_rays(self.H, self.W, self.K, pose)
 
-            if precrop_frac is not None and N_rand is not None:
+            if precrop_frac is not None:
                 dH = int(self.H//2 * precrop_frac)
                 dW = int(self.W//2 * precrop_frac)
                 # shape: (2dH, 2dW)，即2dW个横坐标，2dH个纵坐标。
@@ -128,12 +127,11 @@ class BlenderPrecropRayDataset(BlenderImageDataset):
                         torch.linspace(self.H//2 - dH, self.H//2 + dH - 1, 2*dH),
                         torch.linspace(self.W//2 - dW, self.W//2 + dW - 1, 2*dW)
                     ), -1)
-                coords = torch.reshape(coords, [-1, 2])  # (H * W, 2)
-                select_inds = np.random.choice(coords.shape[0], size=[N_rand], replace=False)  # (N_rand,)
-                select_coords = coords[select_inds].long()  # (N_rand, 2)
-                ray_rgb = img[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
-                ray_o = ray_o[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
-                ray_d = ray_d[select_coords[:, 0], select_coords[:, 1]]  # (N_rand, 3)
+                coords = torch.reshape(coords, [-1, 2]).long()  # (H * W, 2)
+                # 舍弃了 N_rand
+                ray_rgb = img[coords[:, 0], coords[:, 1]]  # (H * W, 3)
+                ray_o = ray_o[coords[:, 0], coords[:, 1]]  # (H * W, 3)
+                ray_d = ray_d[coords[:, 0], coords[:, 1]]  # (H * W, 3)
             
             else:
                 ray_rgb = img.reshape(-1, 3)
@@ -144,6 +142,6 @@ class BlenderPrecropRayDataset(BlenderImageDataset):
             rays_o.append(ray_o)
             rays_d.append(ray_d)
 
-        self.rgb_original = torch.concatenate(rgb_original, 0)                          # (N * N_rand, 3)
+        self.rgb_original = torch.concatenate(rgb_original, 0)                          # (N * H * W, 3)
         self.rays_o = torch.concatenate(rays_o, 0)
         self.rays_d = torch.concatenate(rays_d, 0)

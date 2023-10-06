@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from einops import repeat
 from torch import nn
 
-from .embedder import PositionalEmbedder
+from .encoding import PositionalEncoding, FourierEncoding
 
 
 class NerfBase(nn.Module):
@@ -60,10 +60,10 @@ class Nerf(NerfBase):
     ):
         super().__init__(raw_noise_std, white_bkgd)
 
-        self.pts_embedder = PositionalEmbedder(multires)
-        self.viewdirs_embedder = PositionalEmbedder(multires_views)
-        input_ch = self.pts_embedder.cal_outdim(input_ch)
-        input_ch_views = self.viewdirs_embedder.cal_outdim(input_ch_views)
+        self.pts_encoding = PositionalEncoding(multires)
+        self.viewdirs_encoding = PositionalEncoding(multires_views)
+        input_ch = self.pts_encoding.cal_outdim(input_ch)
+        input_ch_views = self.viewdirs_encoding.cal_outdim(input_ch_views)
 
         self.skips = skips
 
@@ -79,7 +79,123 @@ class Nerf(NerfBase):
         viewdirs_norm = torch.norm(rays_d, dim=-1, keepdim=True).to(rays_d.device)      # [N_rays, 1]
         viewdirs = rays_d / viewdirs_norm                                               # [N_rays, 3]
         viewdirs = repeat(viewdirs, 'b c -> b n c', n=N_samples)                        # [N_rays, N_samples, 3]
-        input_pts, input_views = self.pts_embedder(pts), self.viewdirs_embedder(viewdirs)
+        input_pts, input_views = self.pts_encoding(pts), self.viewdirs_encoding(viewdirs)
+
+        h = input_pts
+        for i, l in enumerate(self.pts_linears):
+            h = self.pts_linears[i](h)
+            h = F.relu(h)
+            if i in self.skips:
+                h = torch.cat([input_pts, h], -1)
+
+        sigma = self.alpha_linear(h)    # (N_rays, N_samples, 1)
+        sigma = F.relu(sigma)
+
+        feature = self.feature_linear(h)
+        h = torch.cat([feature, input_views], -1)
+        for i, l in enumerate(self.views_linears):
+            h = self.views_linears[i](h)
+            h = F.relu(h)
+
+        rgb = self.rgb_linear(h)        # (N_rays, N_samples, 3)
+        rgb = F.sigmoid(rgb)
+
+        return self.raw2outputs(rgb, sigma, z_vals, viewdirs_norm)
+    
+
+class Nerf_Fourier(NerfBase):
+    def __init__(
+        self,
+        D,
+        W,
+        input_ch,
+        input_ch_views,
+        skips,
+        multires,
+        multires_views,
+        raw_noise_std,
+        white_bkgd
+    ):
+        super().__init__(raw_noise_std, white_bkgd)
+
+        self.pts_encoding = FourierEncoding(multires)
+        self.viewdirs_encoding = FourierEncoding(multires_views)
+        input_ch = self.pts_encoding.cal_outdim(input_ch)
+        input_ch_views = self.viewdirs_encoding.cal_outdim(input_ch_views)
+
+        self.skips = skips
+
+        self.pts_linears = nn.ModuleList(
+            [nn.Linear(input_ch, W)] + [nn.Linear(W, W) if i not in self.skips else nn.Linear(W + input_ch, W) for i in range(D-1)]
+        )
+        self.views_linears = nn.ModuleList([nn.Linear(input_ch_views + W, W // 2)])
+        self.feature_linear = nn.Linear(W, W)
+        self.alpha_linear = nn.Linear(W, 1)
+        self.rgb_linear = nn.Linear(W // 2, 3)
+
+    def forward(self, pts, rays_d, z_vals, N_samples):
+        viewdirs_norm = torch.norm(rays_d, dim=-1, keepdim=True).to(rays_d.device)      # [N_rays, 1]
+        viewdirs = rays_d / viewdirs_norm                                               # [N_rays, 3]
+        viewdirs = repeat(viewdirs, 'b c -> b n c', n=N_samples)                        # [N_rays, N_samples, 3]
+        input_pts, input_views = self.pts_encoding(pts), self.viewdirs_encoding(viewdirs)
+
+        h = input_pts
+        for i, l in enumerate(self.pts_linears):
+            h = self.pts_linears[i](h)
+            h = F.relu(h)
+            if i in self.skips:
+                h = torch.cat([input_pts, h], -1)
+
+        sigma = self.alpha_linear(h)    # (N_rays, N_samples, 1)
+        sigma = F.relu(sigma)
+
+        feature = self.feature_linear(h)
+        h = torch.cat([feature, input_views], -1)
+        for i, l in enumerate(self.views_linears):
+            h = self.views_linears[i](h)
+            h = F.relu(h)
+
+        rgb = self.rgb_linear(h)        # (N_rays, N_samples, 3)
+        rgb = F.sigmoid(rgb)
+
+        return self.raw2outputs(rgb, sigma, z_vals, viewdirs_norm)
+    
+
+class Nerf_Fourier_MY(NerfBase):
+    def __init__(
+        self,
+        D,
+        W,
+        input_ch,
+        input_ch_views,
+        skips,
+        multires,
+        multires_views,
+        raw_noise_std,
+        white_bkgd
+    ):
+        super().__init__(raw_noise_std, white_bkgd)
+
+        self.pts_encoding = FourierEncodingMy(multires)
+        self.viewdirs_encoding = FourierEncodingMy(multires_views)
+        input_ch = self.pts_encoding.cal_outdim(input_ch)
+        input_ch_views = self.viewdirs_encoding.cal_outdim(input_ch_views)
+
+        self.skips = skips
+
+        self.pts_linears = nn.ModuleList(
+            [nn.Linear(input_ch, W)] + [nn.Linear(W, W) if i not in self.skips else nn.Linear(W + input_ch, W) for i in range(D-1)]
+        )
+        self.views_linears = nn.ModuleList([nn.Linear(input_ch_views + W, W // 2)])
+        self.feature_linear = nn.Linear(W, W)
+        self.alpha_linear = nn.Linear(W, 1)
+        self.rgb_linear = nn.Linear(W // 2, 3)
+
+    def forward(self, pts, rays_d, z_vals, N_samples):
+        viewdirs_norm = torch.norm(rays_d, dim=-1, keepdim=True).to(rays_d.device)      # [N_rays, 1]
+        viewdirs = rays_d / viewdirs_norm                                               # [N_rays, 3]
+        viewdirs = repeat(viewdirs, 'b c -> b n c', n=N_samples)                        # [N_rays, N_samples, 3]
+        input_pts, input_views = self.pts_encoding(pts), self.viewdirs_encoding(viewdirs)
 
         h = input_pts
         for i, l in enumerate(self.pts_linears):

@@ -1,14 +1,13 @@
 data:
   target: nerf.data.blender_dataset.BlenderPrecropRayDataset
   params: 
-    basedir: 'data/nerf_synthetic/chair'
+    basedir: data/nerf_synthetic/chair
     factor: 2
     skip: 1
     white_bkgd: True
   train:
-    precrop:
+    other_params:
       precrop_frac: 0.5
-      N_rand: 4096
     dataloader_params:
       batch_size: 1024
       shuffle: True
@@ -60,11 +59,11 @@ render:
     perturb: False
 
 setting:
-  device: 1
-  logdir: logs/blender_paper_chair_test
+  device: 0
+  logdir: logs/blender_paper_chair
   lr: 5e-4
   ckpt: 
   step_num: 200000
   precrop_iters: 1000
-  i_val: 10000
+  i_val: 2000
   i_ckpt: 50000

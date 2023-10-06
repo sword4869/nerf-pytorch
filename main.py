@@ -1,23 +1,21 @@
 import os
+from cv2 import log
+
+import numpy as np
 import torch
 import torch.nn.functional as F
 from omegaconf import OmegaConf
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-from nerf.modules.render import Render
-from nerf.model.nerf import Nerf
+
 from nerf.data.blender_dataset import BlenderPrecropRayDataset
+from nerf.model.nerf import Nerf, Nerf_Fourier
+from nerf.modules.loss import mse2psnr_torch
+from nerf.modules.render import Render
 from nerf.utils import ImgBufferHub
-import numpy as np
+from torchmetrics.aggregation import MeanMetric
 
 def train(global_step):
-    dataset_train_precrop = BlenderPrecropRayDataset(split='train', **config['data']['params'], **config['data']['train']['precrop'])
-    dataloader_train_precrop = torch.utils.data.DataLoader(dataset_train_precrop, **config['data']['train']['dataloader_params'])
-    print(f'* Dataset loaded. Train rays {len(dataset_train_precrop)}')
-    
-    dataset_train_without_precrop = BlenderPrecropRayDataset(split='train', **config['data']['params'])
-    dataloader_train_without_precrop = torch.utils.data.DataLoader(dataset_train_without_precrop, **config['data']['train']['dataloader_params'])
-    print(f'* Dataset loaded. Train rays {len(dataset_train_without_precrop)}')
-
     def loader(global_step, dataloader_train, precrop):
         print('* Train precrop: ', precrop)
         while True:
@@ -41,11 +39,18 @@ def train(global_step):
                 loss_coarse = F.mse_loss(rgb_coarse, rgb_original)
                 loss_fine = F.mse_loss(rgb_fine, rgb_original)
                 loss = loss_coarse + loss_fine
-                pbar.set_postfix({
+                psnr_coarse = mse2psnr_torch(loss_coarse)
+                psnr_fine = mse2psnr_torch(loss_fine)
+                log_values = {
                     'loss': loss.item(),
                     'loss_coarse': loss_coarse.item(),
-                    'loss_fine': loss_fine.item()
-                })
+                    'loss_fine': loss_fine.item(),
+                    'psnr_coarse': psnr_coarse.item(),
+                    'psnr_fine': psnr_fine.item(),
+                }
+                pbar.set_postfix(log_values)
+                writer.add_scalars('train', log_values, global_step)
+
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
@@ -60,15 +65,28 @@ def train(global_step):
                         'network_fn_state_dict': render.model_coarse.state_dict(),
                         'network_fine_state_dict': render.model_fine.state_dict()
                     }
-                    torch.save(ckpt, f'{global_step}.pt')
+                    torch.save(ckpt, f'{logdir}/{global_step}.pt')
 
+    if global_step < config['setting']['precrop_iters']:
+        dataset_train_precrop = BlenderPrecropRayDataset(split='train', **config['data']['params'], **config['data']['train']['other_params'])
+        dataloader_train_precrop = torch.utils.data.DataLoader(dataset_train_precrop, **config['data']['train']['dataloader_params'])
+        print(f'* Dataset loaded. Train rays {len(dataset_train_precrop)}')
+        
+        global_step = loader(global_step, dataloader_train_precrop, precrop=True)
     
-    global_step = loader(global_step, dataloader_train_precrop, precrop=True)
+    dataset_train_without_precrop = BlenderPrecropRayDataset(split='train', **config['data']['params'])
+    dataloader_train_without_precrop = torch.utils.data.DataLoader(dataset_train_without_precrop, **config['data']['train']['dataloader_params'])
+    print(f'* Dataset loaded. Train rays {len(dataset_train_without_precrop)}')
+
     global_step = loader(global_step, dataloader_train_without_precrop, precrop=False)
 
 
 @torch.no_grad()
 def val(global_step):
+    '''
+    不能每个batch都计算loss，因为这样会导致loss过小，psnr过大，不符合实际情况
+    所以每个epoch只计算一次loss
+    '''
     val_dir = f'{logdir}/val_{global_step}'
     os.makedirs(val_dir, exist_ok=True)
 
@@ -78,8 +96,14 @@ def val(global_step):
 
     assert len(dataset_val) % (H * W) == 0
     N_img = len(dataset_val) // (H * W)
+
     img_indexs = np.random.choice(N_img, config['data']['val']['other_params']['count'])
     batch_size = config['data']['val']['other_params']['batch_size']
+
+    loss_metric = MeanMetric().to(device)
+    loss_coarse_metric = MeanMetric().to(device)
+    loss_fine_metric = MeanMetric().to(device)
+
     for img_index in img_indexs:
         for i in range(img_index * H * W, (img_index + 1) * H * W, batch_size):
             batch = dataset_val[i: i + batch_size ]
@@ -88,8 +112,26 @@ def val(global_step):
             rays_d = batch['rays_d'].to(device)
             rgb_coarse, rgb_fine, depth_coarse, depth_fine, disp_coarse, disp_fine, acc_coarse, acc_fine, weights_coarse, weights_fine, alpha_coarse, alpha_fine = render.render_rays(
                 rays_o, rays_d)
+            
+            loss_coarse = F.mse_loss(rgb_coarse, rgb_original)
+            loss_fine = F.mse_loss(rgb_fine, rgb_original)
+            loss = loss_coarse + loss_fine
+            loss_metric.update(loss)
+            loss_coarse_metric.update(loss_coarse)
+            loss_fine_metric.update(loss_fine)
 
             img_buffer_hub.update(val_dir, rgb_original=rgb_original, rgb_coarse=rgb_coarse, rgb_fine=rgb_fine, disp_coarse=disp_coarse, disp_fine=disp_fine)
+
+    
+    log_values = {
+        'loss': loss_metric.compute().item(),
+        'loss_coarse': loss_coarse_metric.compute().item(),
+        'loss_fine': loss_fine_metric.compute().item(),
+    }
+    log_values['psnr_coarse'] = mse2psnr_torch(log_values['loss_coarse'])
+    log_values['psnr_fine'] = mse2psnr_torch(log_values['loss_fine'])
+
+    writer.add_scalars('val', log_values, global_step)
 
 @torch.no_grad()
 def test(global_step):
@@ -113,13 +155,25 @@ def test(global_step):
 
         img_buffer_hub.update(test_dir, rgb_original=rgb_original, rgb_coarse=rgb_coarse, rgb_fine=rgb_fine)
 
+@torch.no_grad()
+def inference():
+    tqdm.write(f'render poses...')
+    # Turn on testing mode
+    rgbs, disps = render_path(hwf, K, args.chunk, render_poses, render_kwargs_test)
+    moviebase = os.path.join(basedir, expname, 'render_poses_{:06d}_'.format(i))
+    imageio.mimwrite(moviebase + 'rgb.mp4', to8b(rgbs), fps=30, quality=8)
+    imageio.mimwrite(moviebase + 'disp.mp4', to8b(disps / np.max(disps)), fps=30, quality=8)
 
 if __name__ == '__main__':
-    config = OmegaConf.load('config/lego.yaml')
+    config = OmegaConf.load('config/chair.yaml')
 
-    device = torch.device(config['setting']['device'])
     logdir = config['setting']['logdir']
     os.makedirs(logdir, exist_ok=True)
+    OmegaConf.save(config=config, f=f'{logdir}/config.yaml')
+    writer = SummaryWriter(f'{logdir}/tensorboard')
+
+
+    device = torch.device(config['setting']['device'])
 
     dataset_val = BlenderPrecropRayDataset(split='val', **config['data']['params'])
 
@@ -140,5 +194,6 @@ if __name__ == '__main__':
         print(f'* global_step: {global_step}')
 
     render = Render(model_coarse, model_fine, **config['render']['params'])
-    # train(global_step)
+    
+    train(global_step)
     # test(global_step)

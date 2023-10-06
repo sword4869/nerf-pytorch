@@ -1,14 +1,13 @@
 data:
   target: nerf.data.blender_dataset.BlenderPrecropRayDataset
   params: 
-    basedir: 'data/nerf_synthetic/lego'
+    basedir: data/nerf_synthetic/lego
     factor: 2
     skip: 1
     white_bkgd: True
   train:
-    precrop:
+    other_params:
       precrop_frac: 0.5
-      N_rand: 4096
     dataloader_params:
       batch_size: 1024
       shuffle: True
@@ -21,7 +20,7 @@ data:
   val:
     other_params:
       batch_size: 1024
-      count: 1
+      count: 3
 
 
 model_coarse:
@@ -65,7 +64,7 @@ setting:
   lr: 5e-4
   ckpt: logs/blender_paper_lego/200000.tar
   # ckpt: 
-  step_num: 250000
-  precrop_iters: 500
-  i_val: 10000
+  step_num: 200000
+  precrop_iters: 1000
+  i_val: 5000
   i_ckpt: 50000
