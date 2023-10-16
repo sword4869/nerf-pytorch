@@ -207,7 +207,7 @@ Currently, the industry standard tends to be the right-hand XYZ coordinate syste
 
 ![图 8](../../images/0b2e24a1c6d97650f49d5d02e08f0f244fa60e9a700c62330261ddb30daeb61d.png)  
 
-
+We use the OpenGL/Blender (and original NeRF) coordinate convention for cameras. +X is right, +Y is up, and +Z is pointing back and away from the camera. -Z is the look-at direction.
 
 
 ![图 3](../../images/d7811eeb810841979e5f8cbd88f6e6d71e2744c4d464081863dd8d93079e2370.png)  

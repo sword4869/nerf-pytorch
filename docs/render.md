@@ -92,6 +92,11 @@ $$
 
 ![图 1](../images/2ffc51527299c38302924a74d5bbf66a39051bef35738e98adb30aac09d15218.png)
 
+> 变体：从密度 $\sigma$ 直接变为 occupancy 不透明度 $\alpha$
+> 直接由MLP预测，不算了
+
+![Alt text](../images/image.png)
+
 
 ## 1.2. code
 
