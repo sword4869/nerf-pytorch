@@ -1,8 +1,8 @@
 - [1. 物像关系](#1-物像关系)
 - [2. FOV](#2-fov)
 - [3. 相机参数](#3-相机参数)
-  - [3.1. 内参](#31-内参)
-  - [3.2. 外参](#32-外参)
+  - [3.1. 内参 K](#31-内参-k)
+  - [3.2. 外参 T](#32-外参-t)
 - [4. 坐标系](#4-坐标系)
   - [4.1. 右手坐标系 right-handed coordinates](#41-右手坐标系-right-handed-coordinates)
   - [4.2. 各种右手的相机坐标系](#42-各种右手的相机坐标系)
@@ -77,7 +77,7 @@ focal = .5 * W / np.tan(.5 * camera_angle_x)
 
 相机两个参数：内参和外参
 
-- 外参extrinsics，即**M**
+- 外参extrinsics，即**T**
     描述相机的位姿（位置t是指相机在空间中的哪个地方，而姿态R则是指相机的朝向）
 
 - 内参intrinsics，即**K**
@@ -88,7 +88,7 @@ focal = .5 * W / np.tan(.5 * camera_angle_x)
 - 都用齐次坐标表示
   
 
-### 3.1. 内参
+### 3.1. 内参 K
 
 透射：The intrinsic matrix transforms 3D camera cooordinates to 2D homogeneous image coordinates.
 
@@ -110,66 +110,160 @@ K = np.array([
 ])
 ```
 
-### 3.2. 外参
+### 3.2. 外参 T
 
 let's consider **translation for points (positions)** and **rotations for vectors (directions)**.
 
-> 相机外参是一个4x4的矩阵M。
+> 相机外参是一个4x4的矩阵。
 
-相机外参叫做**world-to-camera (w2c)矩阵**，其作用是把3D世界坐标系的坐标变换到2D相机坐标系的坐标。
+相机外参叫做**world-to-camera (w2c)矩阵**，其作用是把3D世界坐标系的坐标变换到3D相机坐标系的坐标。
 
-相机外参的逆矩阵被称为**camera-to-world (c2w)矩阵**，其作用是把2D相机坐标系的坐标变换到3D世界坐标系的坐标。
+相机外参的逆矩阵被称为**camera-to-world (c2w)矩阵**，其作用是把3D相机坐标系的坐标变换到3D世界坐标系的坐标。
 
-> **NeRF主要使用c2w**
 
-c2w的含义: camera's pose matrix
+> row/column major
+
+red: x-axis, green: y-axis, blue: z-axis
+
+| Column-Major Vector| Row-Major Vector|
+|:-:|:-:|
+|从右到左, Post-multiplication | 从左到右, Pre-multiplication |
+|$P^{\prime} = T_3*T_2*T_1*P$ | $P^{\prime}=P*T_1*T_2*T_3$ |
+| API: OpenGL, Blender, PBRT|API: Direct X, Maya |
+|${ \begin{bmatrix} \color{red}{X0}& \color{green}{Y0}&\color{blue}{Z0}&X\\ \color{red}{X1}& \color{green}{Y1}&\color{blue}{Z1}&Y\\ \color{red}{X2}& \color{green}{Y2}&\color{blue}{Z2}&Z\\0&0&0&1\end{bmatrix} } = \begin{bmatrix} \color{red}{\textbf{Col}_X} & \color{green}{\textbf{Col}_Y} & \color{blue}{\textbf{Col}_Z} & \textbf{Col}_t\\ 0 &0 & 0 & 1\end{bmatrix}$ | ${\begin{bmatrix} \color{red}{X0}& \color{red}{X1}&\color{red}{X2}&0\\ \color{green}{Y0}& \color{green}{Y1}&\color{green}{Y2}&0\\ \color{blue}{Z0}& \color{blue}{Z1}&\color{blue}{Z2}&0\\ X & Y &Z & 1 \end{bmatrix} } = \begin{bmatrix} \color{red}{\textbf{Row}_X} & 0\\ \color{green}{\textbf{Row}_Y} & 0\\ \color{blue}{\textbf{Row}_Z} & 0 \\ \textbf{Row}_t & 1\end{bmatrix}$ |
+
+
+
+属于刚体变换，包括旋转和平移操作（先平移后旋转）。
+
+比如column-major w2c：
+- 世界坐标系的欧式点$P_{w}=[X_{w}, Y_{w}, Z_{w}]^\top$，相机坐标系的欧式点$P_{c}=[X_{c}, Y_{c}, Z_{c}]^\top$，
+
+    $$\begin{aligned}
+    P_{c}&=RP_{w}+t \\
+    \begin{bmatrix} X_{c} \\ Y_{c} \\ Z_{c}  \end{bmatrix}  
+    &= R \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w}  \end{bmatrix} + \begin{bmatrix} t_{x} \\  t_{y} \\ t_{z}  \end{bmatrix}
+    \end{aligned}$$
+
+- 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]^\top$，相机坐标系的欧式点$P_{c}=[X_{c}, Y_{c}, Z_{c}]^\top$，
+
+    $$\begin{aligned}
+    P_{c}&=\begin{bmatrix} R & t \end{bmatrix}P_{w}\\
+    \begin{bmatrix} X_{c} \\ Y_{c} \\ Z_{c} \end{bmatrix}  
+    &= \begin{bmatrix} R & t \end{bmatrix}  \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w} \\ 1 \end{bmatrix}
+    \end{aligned}$$
+
+- 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]^\top$，相机坐标系的齐次坐标点$P_{c}=[X_{c}, Y_{c}, Z_{c}, 1]^\top$，
+    $$\begin{aligned}
+    P_{c}&=\begin{bmatrix} R & t \\ 0^T & 1 \end{bmatrix}P_{w}\\
+    \begin{bmatrix} X_{c} \\ Y_{c} \\ Z_{c} \\ 1 \end{bmatrix}  
+    &= \begin{bmatrix} R & t \\ 0^T & 1  \end{bmatrix}  \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w} \\ 1 \end{bmatrix}
+    \end{aligned}$$
+
+    甚至可以进一步分解，这样就很明显是先乘旋转矩阵，后乘平移矩阵。
+
+    $$
+    \begin{aligned}
+    \left[\begin{array}{c|c}R&\mathbf{t}\\\hline\mathbf{0\top}&1\end{array}\right]
+    & =\left[\begin{array}{c|c}I&\mathbf{t}\\\hline\mathbf{0\top}&1\end{array}\right]\times\left[\begin{array}{c|c}R&\mathbf{0}\\\hline\mathbf{0\top}&1\end{array}\right]  \\
+    &=\left[\begin{array}{ccc|c}1&0&0&t_1\\0&1&0&t_2\\0&0&1&t_3\\\hline0&0&0&1\end{array}\right]\times\left[\begin{array}{ccc|c}r_{1,1}&r_{1,2}&r_{1,3}&0\\r_{2,1}&r_{2,2}&r_{2,3}&0\\r_{3,1}&r_{3,2}&r_{3,3}&0\\\hline0&0&0&1\end{array}\right]
+    \end{aligned}
+    $$
+
+比如row-major w2c：
+- 世界坐标系的欧式点$P_{w}=[X_{w}, Y_{w}, Z_{w}]$，相机坐标系的欧式点$P_{c}=[X_{c}, Y_{c}, Z_{c}]$，
+
+    $$\begin{aligned}
+    P_{c}&=P_{w}R+t \\
+    \begin{bmatrix} X_{c} & Y_{c} & Z_{c}  \end{bmatrix}  
+    &= \begin{bmatrix} X_{w} & Y_{w} & Z_{w}  \end{bmatrix} R + \begin{bmatrix} t_{x} & t_{y} & t_{z} \end{bmatrix}
+    \end{aligned}$$
+
+- 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]$，相机坐标系的欧式点$P_{c}=[X_{c}, Y_{c}, Z_{c}]$，
+
+    $$\begin{aligned}
+    P_{c}&=P_{w}\begin{bmatrix} R \\ t \end{bmatrix}\\
+    \begin{bmatrix} X_{c} & Y_{c} & Z_{c} \end{bmatrix}  
+    &= \begin{bmatrix} X_{w} &  Y_{w} & Z_{w} & 1 \end{bmatrix} \begin{bmatrix} R \\ t \end{bmatrix}
+    \end{aligned}$$
+
+- 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]$，相机坐标系的齐次坐标点$P_{c}=[X_{c}, Y_{c}, Z_{c}, 1]$，
+    $$\begin{aligned}
+    P_{c}&=\begin{bmatrix} R &  0 \\ t & 1 \end{bmatrix}P_{w}\\
+    \begin{bmatrix} X_{c} & Y_{c} & Z_{c} & 1 \end{bmatrix}  
+    &= \begin{bmatrix} X_{w} & Y_{w} & Z_{w} & 1 \end{bmatrix}\begin{bmatrix} R &  0 \\ t & 1 \end{bmatrix}  
+    \end{aligned}$$
+
+    甚至可以进一步分解，这样就很明显是先乘旋转矩阵，后乘平移矩阵。
+
+    $$
+    \begin{aligned}
+    \left[\begin{array}{c|c}R&\mathbf{0}\\\hline\mathbf{t}&1\end{array}\right]
+    & =\left[\begin{array}{c|c}R&\mathbf{0}\\\hline\mathbf{0}&1\end{array}\right]\times \left[\begin{array}{c|c}I&\mathbf{0}\\\hline\mathbf{t}&1\end{array}\right] \\
+    &=\left[\begin{array}{ccc|c}r_{1,1}&r_{1,2}&r_{1,3}&0\\r_{2,1}&r_{2,2}&r_{2,3}&0\\r_{3,1}&r_{3,2}&r_{3,3}&0\\\hline0&0&0&1\end{array}\right] \times \left[\begin{array}{ccc|c}1&0&0&0\\0&1&0&0\\0&0&1&0\\\hline t_1&t_2&t_3&1\end{array}\right]
+    \end{aligned}
+    $$
+
+> **NeRF主要使用 Column-Major 的 c2w**
+
+c2w的含义: camera's pose matrix in world coordinate.
 
 c2w矩阵是一个4x4的矩阵，左上角3x3是旋转矩阵R，又上角的3x1向量是平移向量T。有时写的时候可以忽略最后一行[0,0,0,1]。
 
-![图 6](../../images/1d0fc5c458d0b57f2cec5dc3607ddb3344d04b0477efe23591bb0b3a9a3283a2.png)  
-![图 20](../../images/26b6e238263ccbdcaf06b66cd3523e78f577173a178940a98a0f1ea7c5395b21.png)  
+$$\begin{bmatrix}R&t\\0^\top &1\end{bmatrix}=\begin{bmatrix}\begin{array}{ccc|c}r_{11}&r_{12}&r_{13}&t_1\\r_{21}&r_{22}&r_{23}&t_2\\r_{31}&r_{32}&r_{33}&t_3\\\hline0&0&0&1\end{array}\end{bmatrix}$$
+
+$$\begin{bmatrix}R&t\end{bmatrix}=\begin{bmatrix}\begin{array}{ccc|c}r_{11}&r_{12}&r_{13}&t_1\\r_{21}&r_{22}&r_{23}&t_2\\r_{31}&r_{32}&r_{33}&t_3\end{array}\end{bmatrix}$$
+
+
+
+The camera's extrinsic matrix describes the camera's location in the world $\mathbf{t}$, and what direction it's pointing $\mathbf{R}$. 
+
+For a **Column-Major** transform matrix, the first 3 columns are the +X, +Y, and +Z defining the camera orientation, and the forth column X, Y, Z values define the camera origin. 具体来说, camera orientation 是当前坐标系的轴在要变换到的另一坐标系的轴的方向, camera origin 是当前坐标系的原点在要变换到的另一坐标系的下的坐标。比如，c2w，则旋转矩阵的每一列分别表示了相机坐标系的XYZ轴方向在世界坐标系下对应的XYZ轴方向，平移向量表示的是相机坐标系的原点在世界坐标系中的位置。
+
+- T
+    
+    $\mathbf{T} \in SE(3)$
+    
+    $SE(n) = \left\{\mathbf{T}=\begin{bmatrix}\mathbf{R} & \mathbf{t}\\ 0^\top & 1\end{bmatrix} \in \R^{4\times 4}|\mathbf{R}\in SO(3),\mathbf{t}\in \R^3\right\}$
 
 - R
-    $R \in SO(3)$
-    $SO(n) = \{R \in \R^{n\times n}|RR^T=I,det(R)=1\}$
-    - 旋转矩阵是一个正交矩阵, 正交矩阵的逆等于其转置矩阵。旋转矩阵的逆等于其转置矩阵
+    
+    $\mathbf{R} \in SO(3)$
+    
+    $SO(n) = \{\mathbf{R} \in \R^{n\times n}|\mathbf{R}\mathbf{R}^T=I,\det(\mathbf{R})=1\}$
+    - 旋转矩阵是一个正交矩阵（正交矩阵的逆等于其转置矩阵，则有$\mathbf{R}^{-1} = \mathbf{R}^{\top}$）
     - 行列式值为1
 
-- M
-    $M \in SE(3)$
-    $SE(n) = \left\{T=\begin{bmatrix}R & t\\ 0^T & 1\end{bmatrix} \in \R^{4\times 4}|R\in SO(3),t\in \R^3\right\}$
+- t
 
 
-![图 7](../../images/c2b2c7aff71ab6c0053f2367b48b604c39093e0134a9f8d8f2b46afc01b6b0d0.png) 
-
-The camera's extrinsic matrix describes the camera's location in the world, and what direction it's pointing
-
-- 旋转矩阵的每一列分别表示了相机坐标系的XYZ轴方向在世界坐标系下对应的XYZ轴方向。
-    R'columns are the directions of the camera-axes in the world coordinates.
-
-- 平移向量表示的是相机原点在世界坐标中的位置。即后文讲的**世界坐标下看相机坐标原点的平移向量**。
-    The sign of $t_x$, $t_y$, $t_z$ should reflect the position of the camera origin appears in the world coordinates.
-
-- 意义：将相机坐标系与世界坐标系的转换分解为旋转和平移的过程。
-
-    ![图 5](../../images/ee3d0db691dffa4d96f9ffcaabf9cb0e52ac6a3ded1da48014924c67fb1d696f.png)  
-
-    描述点B。在绿色坐标系下，B点(1,2)。在蓝色坐标系下，B点(2,2)。怎么转化？借助向量。
-
-    描述向量AB。在绿色坐标系下，AB是起点(0,0)和方向向量(1,2)，即AB(1,2)=(0,0)+(1,2)。在蓝色坐标系下是CB=CA+AB, (2,2)=(0,1)+(2,1)。
-    也即A点(0,1)和B点(2,2)=(1,2)-(-1,0)。
-    怎么做到从绿色到蓝色？旋转坐标系，方向向量(2,1)变化为(1,2)，平移向量(-1,0)就是在绿色坐标系下观察的世界坐标系原点的位置。
-
-    ![图 6](../../images/a3b6257693f7e85d96f84d846a740dac3f521287df3779978b9079484f8d3203.png)  
-
-    相机坐标系虚线坐标轴，世界坐标系彩色坐标轴。相机坐标的黑色OA，选转后世界坐标的OB，在相机坐标下看世界坐标原点的平移量是粉色的OO'，世界坐标的O'C = OB - OO'。
-
-    也就是说，关键点，**世界坐标下的向量 = 旋转后的向量 - 相机坐标下看世界坐标原点的平移向量**，或者，****世界坐标下的向量 = 旋转后的向量 + 世界坐标下看相机坐标原点的平移向量****。后者才是矩阵中的 $t$。
+    $\mathbf{t}\in \R^3$
 
 
 
+> 从向量的角度：
 
+![图 5](../../images/ee3d0db691dffa4d96f9ffcaabf9cb0e52ac6a3ded1da48014924c67fb1d696f.png)  
 
+描述点B。在绿色坐标系下，B点(1,2)。在蓝色坐标系下，B点(2,2)。怎么转化？借助向量。
+
+描述向量AB。在绿色坐标系下，AB是起点(0,0)和方向向量(1,2)，即AB(1,2)=(0,0)+(1,2)。在蓝色坐标系下是CB=CA+AB, (2,2)=(0,1)+(2,1)。
+
+也即A点(0,1)和B点(2,2)=(1,2)-(-1,0)。
+
+怎么做到从绿色到蓝色？旋转坐标系，方向向量(2,1)变化为(1,2)，平移向量(-1,0)就是在绿色坐标系下观察的世界坐标系原点的位置。
+
+![图 6](../../images/a3b6257693f7e85d96f84d846a740dac3f521287df3779978b9079484f8d3203.png)  
+
+相机坐标系虚线坐标轴，世界坐标系彩色坐标轴。相机坐标的黑色OA，选转后世界坐标的OB，在相机坐标下看世界坐标原点的平移量是粉色的OO'，世界坐标的O'C = OB - OO'。
+
+也就是说，关键点，**世界坐标下的向量 = 旋转后的向量 - 相机坐标下看世界坐标原点的平移向量**，或者，****世界坐标下的向量 = 旋转后的向量 + 世界坐标下看相机坐标原点的平移向量****。后者才是矩阵中的 $t$。
+
+> 获取
+
+colmap已经设定好了世界坐标系，外参也是依据此世界坐标系的。
+
+![图 1](../../images/962653656f477ecdb5999f0d3a9108a94d3d07c8a53af8de76055e3d2368f298.png)  
 
 ## 4. 坐标系
 坐标系 Coordinate Frames
@@ -242,40 +336,6 @@ camtoworlds_opengl = camtoworlds_opencv @ np.diag([1, -1, -1, 1])
 
 ### 5.1. 世界坐标系<->相机坐标系
 
-属于刚体变换，包括旋转和平移操作，通过六个自由度的外参矩阵反应了物体与相机的相对运动关系
-
-
-- 世界坐标系的欧式点$P_{w}=[X_{w}, Y_{w}, Z_{w}]$，相机坐标系的欧式点$P_{c}=[X_{c}, Y_{c}, Z_{c}]$，
-
-    $$P_{c}=RP_{w}+t$$
-
-    $$\begin{bmatrix} X_{c} \\ Y_{c} \\ Z_{c}  \end{bmatrix}  
-    = R \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w}  \end{bmatrix} + \begin{bmatrix} t_{x} \\  t_{y} \\ t_{z}  \end{bmatrix}$$
-
-- 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]$，相机坐标系的欧式点$P_{c}=[X_{c}, Y_{c}, Z_{c}]$，
-
-    $$P_{c}=\begin{bmatrix} R & T \end{bmatrix}P_{w}$$
-
-    $$\begin{bmatrix} X_{c} \\ Y_{c} \\ Z_{c} \end{bmatrix}  
-    = \begin{bmatrix} R & t \end{bmatrix}  \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w} \\ 1 \end{bmatrix}$$
-
-- 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]$，相机坐标系的齐次坐标点$P_{c}=[X_{c}, Y_{c}, Z_{c}, 1]$，
-
-    $$P_{c}=\begin{bmatrix} R & t \\ 0^T & 1 \end{bmatrix}P_{w}$$
-
-    $$\begin{bmatrix} X_{c} \\ Y_{c} \\ Z_{c} \\ 1 \end{bmatrix}  
-    = \begin{bmatrix} R & t \\ 0^T & 1  \end{bmatrix}  \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w} \\ 1 \end{bmatrix}$$
-
-
-例子：
-
-$\begin{bmatrix} R & T \end{bmatrix}
-\begin{bmatrix} \cos(\theta) \\ -\sin(\theta) \\ -\sin(\theta*zrate) \\ 1 \end{bmatrix}$
-
-![图 1](../../images/962653656f477ecdb5999f0d3a9108a94d3d07c8a53af8de76055e3d2368f298.png)  
-
-colmap已经设定好了世界坐标系，外参也是依据此世界坐标系的。
-
 ### 5.2. 透射
 
 #### 5.2.1. 相机坐标系<->图像坐标系
@@ -338,7 +398,7 @@ $
 
 ![图 26](../../images/b899ce078ef1a11a8bdc6fdde427448eaecbada3eb4ffa9557a90a3afac8dd66.png) 
 
-$ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KM_{w2c}P_w = K\left( R\begin{bmatrix} X_w \\ Y_w \\ Z_w \end{bmatrix} + t \right)$
+$ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KT_{w2c}P_w = K\left( R\begin{bmatrix} X_w \\ Y_w \\ Z_w \end{bmatrix} + t \right)$
 
 - 世界坐标系的欧式点$P_{w}=[X_{w}, Y_{w}, Z_{w}]$，像素坐标的齐次坐标点 $P_{uv}=[u, v]$
 
@@ -351,7 +411,7 @@ $ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KM_{w2c}P_w = K\left( R\begin{bm
     \\ &= 
     \begin{bmatrix} \alpha f_x & 0 & c_x\\ 0 & \beta f_y & c_y\\ 0 & 0 & 1\end{bmatrix}
     \begin{bmatrix} R & t\end{bmatrix}  \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w} \\ 1 \end{bmatrix}
-    \\ &= KMP_w
+    \\ &= KTP_w
     \end{aligned}
     $$
 
@@ -366,7 +426,7 @@ $ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KM_{w2c}P_w = K\left( R\begin{bm
     \\ &= 
     \begin{bmatrix} \alpha f_x & 0 & c_x & 0\\ 0 & \beta f_y & c_y & 0\\ 0 & 0 & 1 & 0\end{bmatrix}
     \begin{bmatrix} R & t \\ 0^T & 1  \end{bmatrix}  \begin{bmatrix} X_{w} \\  Y_{w} \\ Z_{w} \\ 1 \end{bmatrix}
-    \\ &= KMP_w
+    \\ &= KTP_w
     \end{aligned}
     $$
 
@@ -378,19 +438,34 @@ $ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KM_{w2c}P_w = K\left( R\begin{bm
 
 反向 $P_c \to P_w$
 
-> w2c
+> column-major w2c↔c2w，两矩阵互逆。
 
-w2c 可以通过 c2w 的逆
+$$
+\begin{aligned}
+\left[\begin{array}{c|c}\mathbf{R_c}&\mathbf{C}\\\hline \mathbf{0}\top&1\end{array}\right]
+& = \left[\begin{array}{c|c}\mathbf{R}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}  \\
+&=\left[\left[\begin{array}{c|c}\mathbf{I}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]\left[\begin{array}{c|c}\mathbf{R}&0\\\hline\mathbf{0}&1\end{array}\right]\right]^{-1}& (\text{decomposing rigid transform})  \\
+&=\left[\begin{array}{c|c}\mathbf{R}&0\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}\left[\begin{array}{c|c}\mathbf{I}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}& (\text{distributing the inverse})  \\
+&=\left[\begin{array}{c|c}\mathbf{R}^\top &0\\\hline\mathbf{0}\top&1\end{array}\right]\left[\begin{array}{c|c}\mathbf{I}&-\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]& \text{(applying the inverse)}  \\
+&=\left[\begin{array}{c|c}\mathbf{R}^\top&-\mathbf{R}^\top\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]& (\text{matrix multiplication}) 
+\end{aligned}
+$$
 
-![图 19](../../images/2ee73e3e3e12cbd3c6038ada97006e0e0963cf7049df0fc9df2704e66e8bccd9.png)  
 
-- c2w: $M_{c2w} = [R, t]$
+即 $T_{w2c} = [\mathbf{R}, \mathbf{t}], 则T_{c2w} = T_{w2c}^{-1} = [\mathbf{R}^\top, -\mathbf{R}^\top\mathbf{t}]$
 
-    $$P_w = RK^{−1} \begin{bmatrix} v \\ u \\ 1 \end{bmatrix} + t $$
+> 例子
 
-- w2c: $M_{w2c} = [R, t]$，相当于 c2w 形式为 $M_{c2w} = M_{w2c}^{-1} = [R^T, -R^Tt]$
+例子：已知，$T_{c2w} = [\mathbf{R}, \mathbf{t}]$， $P_c=[u,v,1]^\top$
 
-    $$P_w = R^{T}K^{−1} \begin{bmatrix} v \\ u \\ 1 \end{bmatrix} + (-R^Tt)$$
+则，
+$$P_w = \mathbf{R}\mathbf{K}^{−1} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} + \mathbf{t} $$
 
-    - a target pixel $x\in\mathbf{RP}^{2}$ , w2c extrinsics $[R | t]$ , intrinsics $K$ .
-    - ray direction $v=R^{\top}K^{-1}x$
+例子：已知，$T_{w2c} = [\mathbf{R}, \mathbf{t}]$， $P_c=[u,v,1]^\top$
+
+则，
+
+$$P_w = \mathbf{R}^{\top}\mathbf{K}^{−1} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} + (-\mathbf{R}^\top\mathbf{t})$$
+
+- a target pixel $x\in\mathbf{RP}^{2}$ , w2c extrinsics $[R | t]$ , intrinsics $K$ .
+- ray direction $v=R^{\top}K^{-1}x$
