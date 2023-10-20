@@ -3,16 +3,18 @@
 - [3. 相机参数](#3-相机参数)
   - [3.1. 内参 K](#31-内参-k)
   - [3.2. 外参 T](#32-外参-t)
+    - [3.2.1. row/column major](#321-rowcolumn-major)
+    - [3.2.2. 从点的角度理解](#322-从点的角度理解)
+    - [3.2.3. 从向量的角度](#323-从向量的角度)
+    - [3.2.4. w2c 和 c2w 互逆](#324-w2c-和-c2w-互逆)
 - [4. 坐标系](#4-坐标系)
   - [4.1. 右手坐标系 right-handed coordinates](#41-右手坐标系-right-handed-coordinates)
   - [4.2. 各种右手的相机坐标系](#42-各种右手的相机坐标系)
-- [5. Frame Transforms](#5-frame-transforms)
-  - [5.1. 世界坐标系\<-\>相机坐标系](#51-世界坐标系-相机坐标系)
-  - [5.2. 透射](#52-透射)
-    - [5.2.1. 相机坐标系\<-\>图像坐标系](#521-相机坐标系-图像坐标系)
-    - [5.2.2. 图像坐标系\<-\>像素坐标系](#522-图像坐标系-像素坐标系)
+- [5. project](#5-project)
+  - [5.1. 相机坐标系-\>图像坐标系](#51-相机坐标系-图像坐标系)
+  - [5.2. 图像坐标系-\>像素坐标系](#52-图像坐标系-像素坐标系)
   - [5.3. 综合](#53-综合)
-- [反向](#反向)
+- [6. Inverse project](#6-inverse-project)
 
 ---
 ## 1. 物像关系
@@ -121,7 +123,7 @@ let's consider **translation for points (positions)** and **rotations for vector
 相机外参的逆矩阵被称为**camera-to-world (c2w)矩阵**，其作用是把3D相机坐标系的坐标变换到3D世界坐标系的坐标。
 
 
-> row/column major
+#### 3.2.1. row/column major
 
 red: x-axis, green: y-axis, blue: z-axis
 
@@ -132,7 +134,7 @@ red: x-axis, green: y-axis, blue: z-axis
 | API: OpenGL, Blender, PBRT|API: Direct X, Maya |
 |${ \begin{bmatrix} \color{red}{X0}& \color{green}{Y0}&\color{blue}{Z0}&X\\ \color{red}{X1}& \color{green}{Y1}&\color{blue}{Z1}&Y\\ \color{red}{X2}& \color{green}{Y2}&\color{blue}{Z2}&Z\\0&0&0&1\end{bmatrix} } = \begin{bmatrix} \color{red}{\textbf{Col}_X} & \color{green}{\textbf{Col}_Y} & \color{blue}{\textbf{Col}_Z} & \textbf{Col}_t\\ 0 &0 & 0 & 1\end{bmatrix}$ | ${\begin{bmatrix} \color{red}{X0}& \color{red}{X1}&\color{red}{X2}&0\\ \color{green}{Y0}& \color{green}{Y1}&\color{green}{Y2}&0\\ \color{blue}{Z0}& \color{blue}{Z1}&\color{blue}{Z2}&0\\ X & Y &Z & 1 \end{bmatrix} } = \begin{bmatrix} \color{red}{\textbf{Row}_X} & 0\\ \color{green}{\textbf{Row}_Y} & 0\\ \color{blue}{\textbf{Row}_Z} & 0 \\ \textbf{Row}_t & 1\end{bmatrix}$ |
 
-
+**NeRF主要使用 Column-Major 的 c2w**
 
 属于刚体变换，包括旋转和平移操作（先平移后旋转）。
 
@@ -204,7 +206,7 @@ red: x-axis, green: y-axis, blue: z-axis
     \end{aligned}
     $$
 
-> **NeRF主要使用 Column-Major 的 c2w**
+#### 3.2.2. 从点的角度理解
 
 c2w的含义: camera's pose matrix in world coordinate.
 
@@ -236,12 +238,11 @@ For a **Column-Major** transform matrix, the first 3 columns are the +X, +Y, and
 
 - t
 
-
     $\mathbf{t}\in \R^3$
 
 
 
-> 从向量的角度：
+#### 3.2.3. 从向量的角度
 
 ![图 5](../../images/ee3d0db691dffa4d96f9ffcaabf9cb0e52ac6a3ded1da48014924c67fb1d696f.png)  
 
@@ -264,6 +265,27 @@ For a **Column-Major** transform matrix, the first 3 columns are the +X, +Y, and
 colmap已经设定好了世界坐标系，外参也是依据此世界坐标系的。
 
 ![图 1](../../images/962653656f477ecdb5999f0d3a9108a94d3d07c8a53af8de76055e3d2368f298.png)  
+
+
+#### 3.2.4. w2c 和 c2w 互逆
+
+
+> column-major w2c↔c2w，两矩阵互逆。
+
+$$
+\begin{aligned}
+\left[\begin{array}{c|c}\mathbf{R_c}&\mathbf{C}\\\hline \mathbf{0}\top&1\end{array}\right]
+& = \left[\begin{array}{c|c}\mathbf{R}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}  \\
+&=\left[\left[\begin{array}{c|c}\mathbf{I}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]\left[\begin{array}{c|c}\mathbf{R}&0\\\hline\mathbf{0}&1\end{array}\right]\right]^{-1}& (\text{decomposing rigid transform})  \\
+&=\left[\begin{array}{c|c}\mathbf{R}&0\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}\left[\begin{array}{c|c}\mathbf{I}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}& (\text{distributing the inverse})  \\
+&=\left[\begin{array}{c|c}\mathbf{R}^\top &0\\\hline\mathbf{0}\top&1\end{array}\right]\left[\begin{array}{c|c}\mathbf{I}&-\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]& \text{(applying the inverse)}  \\
+&=\left[\begin{array}{c|c}\mathbf{R}^\top&-\mathbf{R}^\top\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]& (\text{matrix multiplication}) 
+\end{aligned}
+$$
+
+
+即 $T_{w2c} = [\mathbf{R}, \mathbf{t}], 则T_{c2w} = T_{w2c}^{-1} = [\mathbf{R}^\top, -\mathbf{R}^\top\mathbf{t}]$
+
 
 ## 4. 坐标系
 坐标系 Coordinate Frames
@@ -317,32 +339,25 @@ We use the OpenGL/Blender (and original NeRF) coordinate convention for cameras.
 camtoworlds_opengl = camtoworlds_opencv @ np.diag([1, -1, -1, 1])
 ```
 
-## 5. Frame Transforms
-
-
-
+## 5. project
 
 图像的成像过程经历了世界坐标系—>相机坐标系—>图像坐标系—>像素坐标系这四个坐标系的转换，如下图所示：
 
 ![图 21](../../images/080cbdb99e930d58e34b77462b1875009c9f9e42dc825a8dbc61d6d2296b527b.png)  
 
-- 像素坐标系 pixels coordinate：以图像平面左上角为原点的坐标系 ，X 轴和Y 轴分别平行于图像坐标系的 X 轴和Y 轴，用 $(u,v)$ 表示其坐标值。像素坐标系就是以像素为单位的图像坐标系。
+- 3D世界坐标系 world coordinate：是三维世界的绝对坐标系，我们需要用它来描述三维环境中的任何物体的位置，用 $(x_{w}, y_{w},z_{w})$ 表示其坐标值。
+ 
+- 3D相机坐标系 camera coordinate：以相机光心为原点的坐标系，X 轴和Y 轴分别平行于图像坐标系的 X 轴和Y 轴，相机的光轴为Z 轴，具体方向看相机坐标系是用的哪种。用 $(x_{c}, y_{c},z_{c})$ 表示其坐标值。
 
-- 图像坐标系 image coordinate：以光心在图像平面投影为原点的坐标系 ，X轴和Y 轴分别平行于图像平面的两条垂直边，用 $(x, y)$ 表示其坐标值。图像坐标系是用物理单位表示像素在图像中的位置。
+- 2D图像坐标系 image coordinate：在 image plane上，即以 principal point 为原点的坐标系，X轴和Y轴的方向同相机坐标系，用 $(x, y)$ 表示其坐标值。图像坐标系是用物理单位表示像素在图像中的位置。
 
-- 相机坐标系 camera coordinate：以相机光心为原点的坐标系，X 轴和Y 轴分别平行于图像坐标系的 X 轴和Y 轴，相机的光轴为Z 轴，用 $(x_{c}, y_{c},z_{c})$ 表示其坐标值。
+- 2D像素坐标系 pixels coordinate：以图像平面左上角为原点的坐标系 ，X轴和Y轴的方向同图像坐标系，用 $(u,v)$ 表示其坐标值。像素坐标系就是以像素为单位的图像坐标系。
 
-- 世界坐标系 world coordinate：是三维世界的绝对坐标系，我们需要用它来描述三维环境中的任何物体的位置，用 $(x_{w}, y_{w},z_{w})$ 表示其坐标值。
-
-### 5.1. 世界坐标系<->相机坐标系
-
-### 5.2. 透射
-
-#### 5.2.1. 相机坐标系<->图像坐标系
+### 5.1. 相机坐标系->图像坐标系
 
 ![图 18](../../images/cdb55d1e17a03b6ffc22e9e3dad8fc263bb6d8bc33cc849254893960c4b1e2c6.png)  
 
-图像坐标系(对应平面叫做image plane)的x和y轴方向和相机坐标系的保持一致。
+图像坐标系的x和y轴方向和相机坐标系的保持一致。
 
 ![图 22](../../images/29f0b1870a1da2e77cd3ad296e1e79b07bbc79296d33644be2e64ee34b297e79.png)  
 
@@ -365,7 +380,9 @@ $\begin{bmatrix} f_x & 0 & 0\\ 0 & f_y & 0\\ 0 & 0 & 1\end{bmatrix}  \begin{bmat
 =Z_c\begin{bmatrix}x \\y \\1 \end{bmatrix}$
 
 
-PS：倒像问题
+PS：倒像问题 / image plane
+
+the image plane that is perpendicular to the optical axis of the camera and at a fixed distance from the pinhole (the focal length).
 
 ![图 23](../../images/2d8672f8aa24c34bc1097463b893585081be453ffc927c33020f1f21f5d99d43.png)  
 
@@ -377,7 +394,7 @@ $$\dfrac{f}{Z_{c}} = -\dfrac{x}{X_c} = -\dfrac{y}{Y_C}$$
 
 ![图 24](../../images/59a8c83face6fedb26b184273bccb9433d009275d722a72dae996a5f958c46e7.png)  
 
-#### 5.2.2. 图像坐标系<->像素坐标系
+### 5.2. 图像坐标系->像素坐标系
 
 ![图 27](../../images/d2019bb8a07eeb32e230a28112f6751b5022826038a05d059debcf03c79defa4.png)  
 
@@ -398,10 +415,14 @@ $
 
 ![图 26](../../images/b899ce078ef1a11a8bdc6fdde427448eaecbada3eb4ffa9557a90a3afac8dd66.png) 
 
-$ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KT_{w2c}P_w = K\left( R\begin{bmatrix} X_w \\ Y_w \\ Z_w \end{bmatrix} + t \right)$
 
-- 世界坐标系的欧式点$P_{w}=[X_{w}, Y_{w}, Z_{w}]$，像素坐标的齐次坐标点 $P_{uv}=[u, v]$
+像素坐标的齐次坐标点 $P_{uv}=[u, v]$. 三种运算方式：
 
+1. 加法
+   
+    $$ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = K\left( R\begin{bmatrix} X_w \\ Y_w \\ Z_w \end{bmatrix} + t \right)$$
+
+2. 世界坐标系的欧式点$P_{w}=[X_{w}, Y_{w}, Z_{w}]$，像素坐标的齐次坐标点 $P_{uv}=[u, v]$
 
     $$\begin{aligned}
     Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} 
@@ -416,7 +437,7 @@ $ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KT_{w2c}P_w = K\left( R\begin{bm
     $$
 
 
-- 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]$，像素坐标的齐次坐标点 $P_{uv}=[u, v]$
+1. 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]
 
     $$\begin{aligned}
     Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} 
@@ -430,29 +451,11 @@ $ Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} = KT_{w2c}P_w = K\left( R\begin{bm
     \end{aligned}
     $$
 
-**相机深度**$z_{c}$ 乘以 **像素坐标**$P_{uv}$ = **相机内参**K 乘以 **相机外参RT** 乘以 **世界坐标**$P_{w}$
+**相机深度**$z_{c}$ 乘以 **像素坐标**$P_{uv}=\begin{bmatrix} u \\ v \\ 1\end{bmatrix}$ 等于 **相机内参**K 乘以 **相机外参T** 乘以 **世界坐标**$P_{w}$
 
 像素坐标系下的一点可以被认为是三维空间中的一条射线， $z_{c}$ 就是像素点在相机坐标系下的深度。
 
-## 反向
-
-反向 $P_c \to P_w$
-
-> column-major w2c↔c2w，两矩阵互逆。
-
-$$
-\begin{aligned}
-\left[\begin{array}{c|c}\mathbf{R_c}&\mathbf{C}\\\hline \mathbf{0}\top&1\end{array}\right]
-& = \left[\begin{array}{c|c}\mathbf{R}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}  \\
-&=\left[\left[\begin{array}{c|c}\mathbf{I}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]\left[\begin{array}{c|c}\mathbf{R}&0\\\hline\mathbf{0}&1\end{array}\right]\right]^{-1}& (\text{decomposing rigid transform})  \\
-&=\left[\begin{array}{c|c}\mathbf{R}&0\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}\left[\begin{array}{c|c}\mathbf{I}&\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]^{-1}& (\text{distributing the inverse})  \\
-&=\left[\begin{array}{c|c}\mathbf{R}^\top &0\\\hline\mathbf{0}\top&1\end{array}\right]\left[\begin{array}{c|c}\mathbf{I}&-\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]& \text{(applying the inverse)}  \\
-&=\left[\begin{array}{c|c}\mathbf{R}^\top&-\mathbf{R}^\top\mathbf{t}\\\hline\mathbf{0}\top&1\end{array}\right]& (\text{matrix multiplication}) 
-\end{aligned}
-$$
-
-
-即 $T_{w2c} = [\mathbf{R}, \mathbf{t}], 则T_{c2w} = T_{w2c}^{-1} = [\mathbf{R}^\top, -\mathbf{R}^\top\mathbf{t}]$
+## 6. Inverse project
 
 > 例子
 
@@ -461,11 +464,14 @@ $$
 则，
 $$P_w = \mathbf{R}\mathbf{K}^{−1} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} + \mathbf{t} $$
 
+- a target pixel $x\in\mathbf{RP}^{2}$ , c2w extrinsics $[R | t]$ , intrinsics $K$ .
+- ray origin $o=\mathbf{t}$, ray direction $r=\mathbf{R}\mathbf{K}^{−1}[u,v,1]^\top$
+
 例子：已知，$T_{w2c} = [\mathbf{R}, \mathbf{t}]$， $P_c=[u,v,1]^\top$
 
 则，
 
 $$P_w = \mathbf{R}^{\top}\mathbf{K}^{−1} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} + (-\mathbf{R}^\top\mathbf{t})$$
 
-- a target pixel $x\in\mathbf{RP}^{2}$ , w2c extrinsics $[R | t]$ , intrinsics $K$ .
-- ray direction $v=R^{\top}K^{-1}x$
+- a target pixel $x\in\mathbf{RP}^{2}$ , w2c extrinsics $[R | t]$ , intrinsics $K$
+- ray origin $o=-\mathbf{R}^\top\mathbf{t}$, ray direction $r=\mathbf{R}^{\top}\mathbf{K}^{−1}[u,v,1]^\top$

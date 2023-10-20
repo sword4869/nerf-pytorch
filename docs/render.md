@@ -1,12 +1,15 @@
 - [1. render](#1-render)
   - [1.1. equations](#11-equations)
+    - [1.1.1. 深度](#111-深度)
+    - [1.1.2. 变体](#112-变体)
   - [1.2. code](#12-code)
     - [1.2.1. render](#121-render)
-    - [1.2.3. render\_rays](#123-render_rays)
-    - [1.2.2. raw2outputs](#122-raw2outputs)
+    - [1.2.2. render\_rays](#122-render_rays)
+    - [1.2.3. raw2outputs](#123-raw2outputs)
 
 
 ---
+
 # 1. render
 ## 1.1. equations
 
@@ -67,7 +70,7 @@ $\sigma_i$表示光线上某处点的密度，$T_i$表示前面粒子的遮挡�
 
 $$
 \begin{aligned} 
-\hat{C}(\boldsymbol{r}) &=\sum_{i=1}^N T_i (1-\exp(-\sigma_i\delta_i)) \boldsymbol{c}_i, 
+\hat{C}(\mathbf{r}) &=\sum_{i=1}^N T_i (1-\exp(-\sigma_i\delta_i)) \mathbf{c}_i, 
 \\ T_i &=\exp{\left(-\sum_{j=1}^{i-1}{\sigma_j\delta_j} \right)},
 \\ \operatorname{where} \delta_i &= t_{i+1} - t_{i}
 \end{aligned}
@@ -79,7 +82,7 @@ $\alpha$表示不透明度，$T_i$透射率就是前面粒子的透明度相乘�
 
 $$
 \begin{aligned} 
-\hat{C}(\boldsymbol{r}) &=\sum_{i=1}^N T_i \alpha_i \boldsymbol{c}_i, 
+\hat{C}(\mathbf{r}) &=\sum_{i=1}^N \omega_i \mathbf{c}_i =\sum_{i=1}^N T_i \alpha_i \mathbf{c}_i, 
 \\ \alpha_i &=\operatorname{alpha}\left(\sigma_i, \delta_i\right)=1-\exp \left(-\sigma_i \delta_i\right), 
 \\ T_i &=\prod_{j=1}^{i-1}\left(1-\alpha_j\right) 
 \\ \operatorname{where} \delta_i &= t_{i+1} - t_{i}
@@ -87,12 +90,37 @@ $$
 \\ \text{特殊点}, T_1 = 1, \delta_n 取 e^{10}
 $$
 
-![图 1](../images/3c507798d267321eb2e8497b05d51f0163f7abb425f4231fd3e8145a53e80bed.png)  
+<details>
+<summary> 
+
+$\displaystyle \mathbf{T}_i =\prod_{j=1}^{i-1}(1-\alpha_j) = \exp \left({-\sum_{j=1}^{i-1}\sigma_j \delta_j} \right)$
+
+</summary>
+
+$$\begin{aligned}
+\mathbf{T}_i 
+&=\exp \left({-\sum_{j=1}^{i-1}\sigma_j \delta_j} \right)\\
+&=\prod_{j=1}^{i-1}\exp\left(-\sigma_j \delta_j\right)\\
+&=\prod_{j=1}^{i-1}\left(1-(1-\exp(-\sigma_j \delta_j))\right)\\
+&=\prod_{j=1}^{i-1}(1-\alpha_j)
+\end{aligned}$$
+
+</details>
 
 
 ![图 1](../images/2ffc51527299c38302924a74d5bbf66a39051bef35738e98adb30aac09d15218.png)
 
-> 变体：从密度 $\sigma$ 直接变为 occupancy 不透明度 $\alpha$
+### 1.1.1. 深度
+
+
+$$
+\hat{D}(\mathbf{r}) =\sum_{i=1}^N \omega_i z_i =\sum_{i=1}^N T_i \alpha_i z_i
+$$
+
+
+### 1.1.2. 变体
+
+：从密度 $\sigma$ 直接变为 occupancy 不透明度 $\alpha$
 > 直接由MLP预测，不算了
 
 ![Alt text](../images/image.png)
@@ -104,7 +132,7 @@ $$
 
 ![图 9](../images/508075e6bc620a721e06bd1a6c6238750758690d98c8eb1a34a299c430b19ae9.png)  
 
-### 1.2.3. render_rays
+### 1.2.2. render_rays
 
 ![图 8](../images/7199044af2b4a9b35da4a8f31f8901366068bc6372e75f59696dd27f9e3230f4.png)  
 
@@ -119,6 +147,6 @@ render_kwargs_test['raw_noise_std'] = 0.
 `sample_pdf()`: 逆采样 
 
 粗和细的点都输入到 fine network 来查询。
-### 1.2.2. raw2outputs
+### 1.2.3. raw2outputs
 
 ![图 7](../images/dd24e119dca965ef5a80d263dddd881bbbc65333bafc511db09f6b13c847d1e7.png)  
