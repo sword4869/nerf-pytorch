@@ -15,6 +15,7 @@
   - [5.2. 图像坐标系-\>像素坐标系](#52-图像坐标系-像素坐标系)
   - [5.3. 综合](#53-综合)
 - [6. Inverse project](#6-inverse-project)
+- [???](#)
 
 ---
 ## 1. 物像关系
@@ -114,7 +115,7 @@ K = np.array([
 
 ### 3.2. 外参 T
 
-let's consider **translation for points (positions)** and **rotations for vectors (directions)**.
+**translation for points (positions)** and **rotations for vectors (directions)**. 故而和相机本身的属性无关，称外参、camera pose.
 
 > 相机外参是一个4x4的矩阵。
 
@@ -299,32 +300,65 @@ Express motion information relative to a reference frame.
 - World Frame
 
 之后的图像坐标系和像素坐标系只有xy轴，且和相机坐标系的xy轴方向保持一致。
+
 ### 4.1. 右手坐标系 right-handed coordinates
-
-手掌：用右手的**4个指头从a转向b**（合拳，而不是松拳），大拇指朝向就是aXb的方向。
-
-三指：右手，大拇指a，食指b，中指的方向就是axb。（是大食中、食中大、中大食的升序，而不是中食大等的降序）
-
-![图 2](../../images/e64bdd1708f9aaa11f38fd1efd544325dac5aee40d904accfee17c096283c59e.png)  
-
-
 > 将左右手性和right-up-forward联系在一起，而不是xyz
+
+The only thing that defines the handedness of the coordinate system is the orientation of the left (or right) vector relative to the up and forward vectors, regardless of what these axes represent.
+
+- 右手：选一个判断就行————$\text{up} \times \text{forward} = + \text{right}$
+    
+    右手坐标系的6个性质：
+    $$\begin{aligned}
+    {right}\times{up}&=+{forward} \\
+    {up}\times{forward}&=+{right} \\
+    {forward}\times{right}&=+{up} \\
+    {up}\times{right}&=-{forward} \\
+    {forward}\times{up}&=-{right} \\
+    {right}\times{forward}&=-{up}
+    \end{aligned}$$
+- 左手：$\text{up} \times \text{forward} = - \text{right}, 即 +\text{left}$
+    
+    左手坐标系的6个性质：
+    $$\begin{aligned}
+    {right}\times{up}&=-{forward} \\
+    {up}\times{forward}&=-{right} \\
+    {forward}\times{right}&=-{up} \\
+    {up}\times{right}&=+{forward} \\
+    {forward}\times{up}&=+{right} \\
+    {right}\times{forward}&=+{up}
+    \end{aligned}$$
+![图 2](../../images/e64bdd1708f9aaa11f38fd1efd544325dac5aee40d904accfee17c096283c59e.png)  
 
 ![图 3](../../images/e8c52001b6f627664240997c2677db5bb989c04d4ada4e4dcaa433de12a624af.png)  
 
 图中b还是右手性，是认为up是z轴，按照right-up-forward来判断它还是右手性。
 
-The only thing that defines the handedness of the coordinate system is the orientation of the left (or right) vector relative to the up and forward vectors, regardless of what these axes represent.
+> 目前，默认采用图a的方式，+X is right, +Y is up, and +Z is forward
 
-Currently, the industry standard tends to be the right-hand XYZ coordinate system where x points to the right, y is up, and z is backwards (coming out of the screen).
+判断左右手坐标系：
+- 右手坐标系：$\vec{x}\times\vec{y}=+\vec{z}$
+- 左手坐标系：$\vec{x}\times\vec{y}=-\vec{z}$
+
+右手坐标系的6个性质：
+$$\begin{aligned}
+&\vec{x}\times\vec{y}=+\vec{z} \\
+&\vec{y}\times\vec{z}=+\vec{x} \\
+&\vec{z}\times\vec{x}=+\vec{y} &\text{特别记住}\\
+&\vec{y}\times\vec{x}=-\vec{z}\\
+&\vec{z}\times\vec{y}=-\vec{x} \\
+&\vec{x}\times\vec{z}=-\vec{y}  &\text{特别记住}
+\end{aligned}$$
+
+> 旋转不变性
+
+一个坐标系是左(右)手坐标系, 如果我们把手转90°，这依旧是一个左(右)手坐标系。
+
 ### 4.2. 各种右手的相机坐标系
 
 
 
 ![图 8](../../images/0b2e24a1c6d97650f49d5d02e08f0f244fa60e9a700c62330261ddb30daeb61d.png)  
-
-We use the OpenGL/Blender (and original NeRF) coordinate convention for cameras. +X is right, +Y is up, and +Z is pointing back and away from the camera. -Z is the look-at direction.
-
 
 ![图 3](../../images/d7811eeb810841979e5f8cbd88f6e6d71e2744c4d464081863dd8d93079e2370.png)  
 
@@ -352,6 +386,8 @@ camtoworlds_opengl = camtoworlds_opencv @ np.diag([1, -1, -1, 1])
 - 2D图像坐标系 image coordinate：在 image plane上，即以 principal point 为原点的坐标系，X轴和Y轴的方向同相机坐标系，用 $(x, y)$ 表示其坐标值。图像坐标系是用物理单位表示像素在图像中的位置。
 
 - 2D像素坐标系 pixels coordinate：以图像平面左上角为原点的坐标系 ，X轴和Y轴的方向同图像坐标系，用 $(u,v)$ 表示其坐标值。像素坐标系就是以像素为单位的图像坐标系。
+
+图像坐标系的x和y轴方向和相机坐标系的保持一致?
 
 ### 5.1. 相机坐标系->图像坐标系
 
@@ -416,7 +452,9 @@ $
 ![图 26](../../images/b899ce078ef1a11a8bdc6fdde427448eaecbada3eb4ffa9557a90a3afac8dd66.png) 
 
 
-像素坐标的齐次坐标点 $P_{uv}=[u, v]$. 三种运算方式：
+像素坐标的齐次坐标点 $P_{uv}=[u, v]$. 外参，投影自然是 w2c.
+
+三种运算方式：
 
 1. 加法
    
@@ -437,7 +475,7 @@ $
     $$
 
 
-1. 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]
+3. 世界坐标系的齐次坐标点$P_{w}=[X_{w}, Y_{w}, Z_{w}, 1]$
 
     $$\begin{aligned}
     Z_c\begin{bmatrix} u \\ v \\ 1\end{bmatrix} 
@@ -457,7 +495,7 @@ $
 
 ## 6. Inverse project
 
-> 例子
+> 例子: 外参，Inverse project 自然是 c2w
 
 例子：已知，$T_{c2w} = [\mathbf{R}, \mathbf{t}]$， $P_c=[u,v,1]^\top$
 
@@ -475,3 +513,20 @@ $$P_w = \mathbf{R}^{\top}\mathbf{K}^{−1} \begin{bmatrix} u \\ v \\ 1 \end{bmat
 
 - a target pixel $x\in\mathbf{RP}^{2}$ , w2c extrinsics $[R | t]$ , intrinsics $K$
 - ray origin $o=-\mathbf{R}^\top\mathbf{t}$, ray direction $r=\mathbf{R}^{\top}\mathbf{K}^{−1}[u,v,1]^\top$
+
+
+## ???
+
+
+![GPNR](../../images/image-1.png)
+
+- $R_c$代表的意思
+- w2c和c2w的真正理解还没有理解
+  
+  第三行：从第四行ray direction的计算来看，原来的extrinsice应该是w2c
+
+  公式1的$R_c$应该是3x3的矩阵，但是第一列是什么意思？怎么会是两个向量的out product?
+  
+  那么公式1的计算结果，应该是world的坐标，公式2再转化为c2w。
+
+  那么We apply T to every camera pose，这个 camera pose 是不是上面的w2c的extrinsice，把c2w的T乘以camera pose？？？而且是谁先乘谁????
