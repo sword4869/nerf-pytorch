@@ -228,6 +228,7 @@ def get_rays_np(H, W, K, c2w):
     # Rotate ray directions from camera frame to the world frame
     # (378, 504, 1, 3) * (3, 3) = (378, 504, 3, 3)， 最后一个维度 (378, 504, 3)
     # 相当于 rays_d = (dirs[..., np.newaxis, :] @ c2w[:3,:3].T).transpose(0,1,3,2).squeeze(-1)
+    # 相当于 rays_d = (c2w[None, None, :3,:3] @ dirs[..., None]).squeeze(-1)
     rays_d = np.sum(dirs[..., np.newaxis, :] * c2w[:3,:3], -1)  # dot product, equals to: [c2w.dot(dir) for dir in dirs]
     # Translate camera frame's origin to the world frame. It is the origin of all rays.
     rays_o = np.broadcast_to(c2w[:3,-1], np.shape(rays_d))
